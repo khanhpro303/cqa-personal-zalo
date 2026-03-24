@@ -1,5 +1,20 @@
 # Cài đặt
 
+## Yêu cầu hệ thống
+
+| | Tối thiểu | Khuyến nghị (10-50 kênh) |
+|---|---|---|
+| CPU | 1 vCPU | 2 vCPU |
+| RAM | 1 GB | 2 GB |
+| Ổ cứng | 10 GB | 20 GB |
+| OS | Ubuntu 20.04+ / Debian 11+ / AlmaLinux 8+ | Ubuntu 22.04 LTS |
+
+Yêu cầu: **Docker** và **Docker Compose** (script cài tự động sẽ cài nếu chưa có).
+
+Hỗ trợ macOS và Windows (qua Docker Desktop) nếu muốn chạy trên máy cá nhân.
+
+## Cài đặt trên VPS
+
 Có 2 cách cài đặt CQA. Khuyến nghị dùng cách 1 (tự động) cho đơn giản nhất.
 
 ## Cách 1: Cài tự động (khuyến nghị)

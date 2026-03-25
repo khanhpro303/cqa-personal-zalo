@@ -108,25 +108,29 @@ func CreateChannel(c *gin.Context) {
 			AccessToken string `json:"access_token"`
 		}
 		if err := json.Unmarshal(req.Credentials, &fbCreds); err == nil && fbCreds.AccessToken != "" {
-			// Try to get Page Access Token from the provided token
-			pageID, pageToken, pageName, err := getFBPageToken(fbCreds.AccessToken)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			// Use the actual page token and page ID
-			fbCreds.PageID = pageID
-			fbCreds.AccessToken = pageToken
-			if pageName != "" {
-				channelName = pageName
-			}
-			externalID = pageID
+			if fbCreds.PageID != "" {
+				// Page Access Token provided directly — use as-is
+				externalID = fbCreds.PageID
+			} else {
+				// Only a user token provided — exchange for page token via /me/accounts
+				pageID, pageToken, pageName, err := getFBPageToken(fbCreds.AccessToken)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+				fbCreds.PageID = pageID
+				fbCreds.AccessToken = pageToken
+				if pageName != "" {
+					channelName = pageName
+				}
+				externalID = pageID
 
-			updatedCreds, _ := json.Marshal(fbCreds)
-			credentialsToStore, err = pkg.Encrypt(updatedCreds, cfg.EncryptionKey)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": "encryption_failed"})
-				return
+				updatedCreds, _ := json.Marshal(fbCreds)
+				credentialsToStore, err = pkg.Encrypt(updatedCreds, cfg.EncryptionKey)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "encryption_failed"})
+					return
+				}
 			}
 		}
 	}

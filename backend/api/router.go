@@ -159,6 +159,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 			tenant.DELETE("/jobs/:jobId", middleware.RequirePermission("jobs", "d"), handlers.DeleteJob)
 			tenant.POST("/jobs/:jobId/trigger", middleware.RequireRole("owner", "admin"), handlers.TriggerJob)
 			tenant.POST("/jobs/:jobId/test-run", middleware.RequireRole("owner", "admin"), handlers.TestRunJob)
+			tenant.POST("/jobs/:jobId/cancel", middleware.RequireRole("owner", "admin"), handlers.CancelJob)
 			tenant.GET("/jobs/:jobId/runs", handlers.ListJobRuns)
 			tenant.GET("/jobs/:jobId/runs/:runId/results", handlers.ListJobResults)
 			tenant.POST("/test-output", handlers.TestOutput)

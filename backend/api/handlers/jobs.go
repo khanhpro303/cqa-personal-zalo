@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +21,9 @@ import (
 	"github.com/vietbui/chat-quality-agent/notifications"
 	"github.com/vietbui/chat-quality-agent/pkg"
 )
+
+// jobCancelFuncs stores cancel functions for running jobs, keyed by job ID
+var jobCancelFuncs sync.Map
 
 type CreateJobRequest struct {
 	Name            string          `json:"name" binding:"required,min=2,max=255"`
@@ -262,6 +266,8 @@ func TestRunJob(c *gin.Context) {
 		analyzer := engine.NewAnalyzer(cfg)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
+		jobCancelFuncs.Store(job.ID, cancel)
+		defer jobCancelFuncs.Delete(job.ID)
 		if _, err := analyzer.RunJobWithLimit(ctx, job, 3); err != nil {
 			log.Printf("[test-run] error for job %s: %v", job.Name, err)
 		}
@@ -310,6 +316,8 @@ func TriggerJob(c *gin.Context) {
 		analyzer := engine.NewAnalyzer(cfg)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
+		jobCancelFuncs.Store(job.ID, cancel)
+		defer jobCancelFuncs.Delete(job.ID)
 		var err error
 		switch mode {
 		case "unanalyzed":
@@ -325,6 +333,38 @@ func TriggerJob(c *gin.Context) {
 	}()
 
 	c.JSON(http.StatusAccepted, gin.H{"message": "job_triggered"})
+}
+
+func CancelJob(c *gin.Context) {
+	tenantID := middleware.GetTenantID(c)
+	userID := middleware.GetUserID(c)
+	jobID := c.Param("jobId")
+
+	var job models.Job
+	if err := db.DB.Where("id = ? AND tenant_id = ?", jobID, tenantID).First(&job).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "job_not_found"})
+		return
+	}
+
+	// Cancel the running context
+	if cancelFn, ok := jobCancelFuncs.Load(job.ID); ok {
+		cancelFn.(context.CancelFunc)()
+		jobCancelFuncs.Delete(job.ID)
+	}
+
+	// Mark running job_runs as cancelled
+	finishedAt := time.Now()
+	db.DB.Model(&models.JobRun{}).
+		Where("job_id = ? AND status = ?", job.ID, "running").
+		Updates(map[string]interface{}{
+			"status":        "cancelled",
+			"finished_at":   &finishedAt,
+			"error_message": "Cancelled by user",
+		})
+
+	log.Printf("[security] job cancelled: user=%s job=%s tenant=%s ip=%s", userID, jobID, tenantID, c.ClientIP())
+
+	c.JSON(http.StatusOK, gin.H{"message": "job_cancelled"})
 }
 
 func ListJobRuns(c *gin.Context) {

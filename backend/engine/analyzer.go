@@ -169,7 +169,9 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 	if maxConversations > 0 {
 		q = q.Limit(maxConversations)
 	}
-	q.Find(&conversations)
+	if err := q.Find(&conversations).Error; err != nil {
+		return a.failRun(&run, fmt.Errorf("fetch conversations: %w", err))
+	}
 
 	log.Printf("[analyzer] job %s: channelIDs=%v, sinceZero=%v, excludeAnalyzed=%v, fullRerun=%v, found %d conversations",
 		job.Name, channelIDs, since.IsZero(), excludeAnalyzed, fullRerun, len(conversations))
@@ -194,6 +196,10 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 			batchSize = n
 		}
 	}
+	// Safety net: prevent infinite loop if batchSize somehow becomes 0
+	if batchSize < 1 {
+		batchSize = 5
+	}
 
 	issuesFound := 0
 	passCount := 0
@@ -205,6 +211,14 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 	} else {
 
 	for _, conv := range conversations {
+		// Check if context cancelled (timeout or manual cancel)
+		select {
+		case <-ctx.Done():
+			log.Printf("[analyzer] job %s: context cancelled, stopping after %d/%d conversations", job.Name, analyzedCount, len(conversations))
+			goto complete
+		default:
+		}
+
 		// Load messages
 		var messages []models.Message
 		mq := db.DB.Where("conversation_id = ?", conv.ID)
@@ -300,6 +314,7 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 
 	} // end else (non-batch mode)
 
+complete:
 	// Complete run
 	finishedAt := time.Now()
 	summaryJSON, _ := json.Marshal(map[string]interface{}{
@@ -613,6 +628,14 @@ func (a *Analyzer) runBatchMode(ctx context.Context, provider ai.AIProvider, job
 
 	// Process in batches
 	for i := 0; i < len(prepared); i += batchSize {
+		// Check if context cancelled
+		select {
+		case <-ctx.Done():
+			log.Printf("[analyzer-batch] job %s: context cancelled, stopping after %d/%d conversations", job.Name, analyzedCount, len(conversations))
+			return
+		default:
+		}
+
 		end := i + batchSize
 		if end > len(prepared) {
 			end = len(prepared)

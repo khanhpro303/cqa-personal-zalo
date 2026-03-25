@@ -24,6 +24,8 @@
         </template>
       </v-tooltip>
       <v-btn v-else color="primary" prepend-icon="mdi-play" size="small" :loading="triggerRunning" class="ml-2" @click="openRunDialog">{{ $t('run_now') }}</v-btn>
+
+      <v-btn v-if="isJobRunning" color="error" variant="outlined" prepend-icon="mdi-stop" size="small" class="ml-2" :loading="cancelling" @click="cancelJob">{{ mdAndUp ? 'Dừng' : '' }}</v-btn>
     </div>
 
     <!-- Run options dialog -->
@@ -722,6 +724,8 @@ function tagColor(tag: string): string {
 }
 const selectedRunId = ref<string | null>(null)
 const testRunning = ref(false)
+const cancelling = ref(false)
+const isJobRunning = computed(() => testRunning.value || triggerRunning.value || jobStore.jobRuns?.[0]?.status === 'running')
 const expandedMap = ref<Record<string, boolean>>({})
 const runDialog = ref(false)
 const clearResultsDialog = ref(false)
@@ -1096,6 +1100,17 @@ async function confirmRun() {
   } finally {
     triggerRunning.value = false
   }
+}
+
+async function cancelJob() {
+  cancelling.value = true
+  try {
+    await api.post(`/tenants/${tenantId.value}/jobs/${jobId.value}/cancel`)
+    testRunning.value = false
+    triggerRunning.value = false
+    await jobStore.fetchJobRuns(tenantId.value, jobId.value)
+  } catch { /* ignore */ }
+  finally { cancelling.value = false }
 }
 
 async function loadResults(runId: string) {

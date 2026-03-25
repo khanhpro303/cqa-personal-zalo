@@ -468,7 +468,18 @@
                           <v-spacer />
                           <span class="text-caption text-grey">{{ formatTime(msg.sent_at) }}</span>
                         </div>
-                        <div class="text-body-2" style="font-size: 13px;">{{ msg.content }}</div>
+                        <div v-if="msg.content" class="text-body-2" style="font-size: 13px;">{{ msg.content }}</div>
+                        <div v-if="msg.content_type === 'sticker'" class="text-caption font-italic">[Sticker]</div>
+                        <div v-if="hasAttachments(msg)" class="mt-1">
+                          <template v-for="(att, ai) in parseAttachments(msg)" :key="ai">
+                            <div v-if="isImageAttachment(att)" class="mb-1">
+                              <img v-if="authImageCache[getAttachmentUrl(att)] && authImageCache[getAttachmentUrl(att)] !== 'loading'" :src="authImageCache[getAttachmentUrl(att)]" style="max-width: 180px; max-height: 180px; border-radius: 8px; cursor: pointer;" @click="lightboxSrc = authImageCache[getAttachmentUrl(att)]" />
+                              <v-progress-circular v-else-if="authImageCache[getAttachmentUrl(att)] === 'loading'" indeterminate size="20" width="2" class="ma-2" />
+                            </div>
+                            <v-chip v-else size="x-small" variant="tonal" class="mr-1" :href="getAttachmentUrl(att)" target="_blank"><v-icon start size="12">mdi-paperclip</v-icon>{{ att.name || 'File' }}</v-chip>
+                          </template>
+                        </div>
+                        <div v-if="!msg.content && !hasAttachments(msg) && msg.content_type !== 'text'" class="text-caption font-italic">[{{ msg.content_type || 'File' }}]</div>
                       </div>
                     </div>
                   </div>
@@ -617,7 +628,18 @@
                       <v-spacer />
                       <span class="text-caption text-grey">{{ formatTime(msg.sent_at) }}</span>
                     </div>
-                    <div class="text-body-2" style="font-size: 13px;">{{ msg.content }}</div>
+                    <div v-if="msg.content" class="text-body-2" style="font-size: 13px;">{{ msg.content }}</div>
+                    <div v-if="msg.content_type === 'sticker'" class="text-caption font-italic">[Sticker]</div>
+                    <div v-if="hasAttachments(msg)" class="mt-1">
+                      <template v-for="(att, ai) in parseAttachments(msg)" :key="ai">
+                        <div v-if="isImageAttachment(att)" class="mb-1">
+                          <img v-if="authImageCache[getAttachmentUrl(att)] && authImageCache[getAttachmentUrl(att)] !== 'loading'" :src="authImageCache[getAttachmentUrl(att)]" style="max-width: 180px; max-height: 180px; border-radius: 8px; cursor: pointer;" @click="lightboxSrc = authImageCache[getAttachmentUrl(att)]" />
+                          <v-progress-circular v-else-if="authImageCache[getAttachmentUrl(att)] === 'loading'" indeterminate size="20" width="2" class="ma-2" />
+                        </div>
+                        <v-chip v-else size="x-small" variant="tonal" class="mr-1" :href="getAttachmentUrl(att)" target="_blank"><v-icon start size="12">mdi-paperclip</v-icon>{{ att.name || 'File' }}</v-chip>
+                      </template>
+                    </div>
+                    <div v-if="!msg.content && !hasAttachments(msg) && msg.content_type !== 'text'" class="text-caption font-italic">[{{ msg.content_type || 'File' }}]</div>
                   </div>
                 </div>
               </div>
@@ -692,11 +714,16 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+    <!-- Lightbox overlay for image zoom -->
+    <div v-if="lightboxSrc" class="lightbox-overlay" @click="lightboxSrc = ''">
+      <img :src="lightboxSrc" class="lightbox-img" @click.stop />
+      <v-btn icon="mdi-close" variant="flat" color="white" size="small" class="lightbox-close" @click="lightboxSrc = ''" />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDisplay } from 'vuetify'
 import { useJobStore, type JobResult } from '../../stores/jobs'
@@ -782,6 +809,49 @@ const paginatedResults = computed(() => {
 
 // Chat messages cache
 const chatMessages = ref<Record<string, any[]>>({})
+const lightboxSrc = ref('')
+const authImageCache = ref<Record<string, string>>({})
+
+function hasAttachments(msg: any) {
+  if (!msg.attachments || msg.attachments === '[]' || msg.attachments === 'null') return false
+  try { const arr = JSON.parse(msg.attachments); return Array.isArray(arr) && arr.length > 0 } catch { return false }
+}
+function parseAttachments(msg: any) {
+  try { return JSON.parse(msg.attachments) || [] } catch { return [] }
+}
+function isImageAttachment(att: any): boolean {
+  if (!att.type) return false
+  const t = att.type.toLowerCase()
+  return t.startsWith('image') || t === 'photo' || t === 'gif' || t === 'sticker'
+}
+function getAttachmentUrl(att: any): string {
+  if (att.local_path) return `/api/v1/files/${att.local_path}`
+  return att.url || ''
+}
+async function loadAuthImage(url: string) {
+  if (!url || authImageCache.value[url]) return
+  if (!url.startsWith('/api/')) { authImageCache.value[url] = url; return }
+  authImageCache.value[url] = 'loading'
+  try {
+    const token = localStorage.getItem('cqa_access_token')
+    const resp = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} })
+    if (resp.ok) { const blob = await resp.blob(); authImageCache.value[url] = URL.createObjectURL(blob) }
+    else { delete authImageCache.value[url] }
+  } catch { delete authImageCache.value[url] }
+}
+function loadImagesForMessages(msgs: any[]) {
+  for (const msg of msgs) {
+    if (msg.attachments) {
+      try {
+        const atts = typeof msg.attachments === 'string' ? JSON.parse(msg.attachments) : msg.attachments
+        if (!Array.isArray(atts)) continue
+        for (const att of atts) { if (isImageAttachment(att)) { const url = getAttachmentUrl(att); if (url) loadAuthImage(url) } }
+      } catch { continue }
+    }
+  }
+}
+watch(chatMessages, (val) => { for (const msgs of Object.values(val)) { if (msgs?.length) loadImagesForMessages(msgs) } }, { deep: true })
+onUnmounted(() => { for (const url of Object.values(authImageCache.value)) { if (url?.startsWith('blob:')) URL.revokeObjectURL(url) } })
 
 // Parsed job fields
 const parsedOutputs = computed(() => {
@@ -1231,3 +1301,9 @@ function classificationSummary(group: any): string {
   return group.review || '—'
 }
 </script>
+
+<style scoped>
+.lightbox-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 9999; cursor: pointer; }
+.lightbox-img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: 8px; cursor: default; }
+.lightbox-close { position: fixed; top: 16px; right: 16px; }
+</style>

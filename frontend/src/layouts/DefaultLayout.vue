@@ -157,7 +157,7 @@
         </div>
         <div class="d-flex align-center mt-2 ga-1">
           <span class="text-caption text-grey">Cập nhật thủ công:</span>
-          <code class="text-caption pa-1 rounded" style="user-select: all; background: #1e1e1e; color: #4fc3f7;">cd /opt/cqa && docker compose pull && docker compose up -d</code>
+          <code class="text-caption pa-1 rounded" style="user-select: all; background: #f5f5f5; color: #333; border: 1px solid #ddd;">cd /opt/cqa && docker compose pull && docker compose up -d</code>
           <v-btn icon="mdi-content-copy" size="x-small" variant="text" color="primary" @click="copyUpdateCmd" />
         </div>
       </v-alert>

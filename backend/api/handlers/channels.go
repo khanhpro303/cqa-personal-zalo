@@ -18,7 +18,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/vietbui/chat-quality-agent/api/contracts"
 	"github.com/vietbui/chat-quality-agent/api/middleware"
+	"github.com/vietbui/chat-quality-agent/channels"
 	"github.com/vietbui/chat-quality-agent/config"
 	"github.com/vietbui/chat-quality-agent/db"
 	"github.com/vietbui/chat-quality-agent/db/models"
@@ -30,24 +32,29 @@ import (
 var httpClientWithTimeout = &http.Client{Timeout: 30 * time.Second}
 
 type CreateChannelRequest struct {
-	ChannelType string          `json:"channel_type" binding:"required,oneof=zalo_oa facebook"`
+	ChannelType string          `json:"channel_type" binding:"required,oneof=zalo_oa facebook personal_zalo_import"`
 	Name        string          `json:"name" binding:"required,min=2,max=255"`
-	Credentials json.RawMessage `json:"credentials" binding:"required"` // JSON: varies by type
+	Credentials json.RawMessage `json:"credentials"` // JSON: varies by type
 	Metadata    string          `json:"metadata"`
 }
 
 type ChannelResponse struct {
-	ID                string     `json:"id"`
-	TenantID          string     `json:"tenant_id"`
-	ChannelType       string     `json:"channel_type"`
-	Name              string     `json:"name"`
-	ExternalID        string     `json:"external_id"`
-	IsActive          bool       `json:"is_active"`
-	Metadata          string     `json:"metadata"`
-	LastSyncAt        *time.Time `json:"last_sync_at"`
-	LastSyncStatus    string     `json:"last_sync_status"`
-	ConversationCount int64      `json:"conversation_count"`
-	CreatedAt         time.Time  `json:"created_at"`
+	ID                     string                               `json:"id"`
+	TenantID               string                               `json:"tenant_id"`
+	ChannelType            string                               `json:"channel_type"`
+	Name                   string                               `json:"name"`
+	ExternalID             string                               `json:"external_id"`
+	IsActive               bool                                 `json:"is_active"`
+	Metadata               string                               `json:"metadata"`
+	LastSyncAt             *time.Time                           `json:"last_sync_at"`
+	LastSyncStatus         string                               `json:"last_sync_status"`
+	ConversationCount      int64                                `json:"conversation_count"`
+	ImportEndpoint         string                               `json:"import_endpoint,omitempty"`
+	ImportEndpointInternal string                               `json:"import_endpoint_internal,omitempty"`
+	ImportSecret           string                               `json:"import_secret,omitempty"`
+	ImportSecretMasked     string                               `json:"import_secret_masked,omitempty"`
+	AccountOwners          []contracts.PersonalZaloAccountOwner `json:"account_owners,omitempty"`
+	CreatedAt              time.Time                            `json:"created_at"`
 }
 
 func ListChannels(c *gin.Context) {
@@ -88,6 +95,21 @@ func CreateChannel(c *gin.Context) {
 	}
 
 	tenantID := middleware.GetTenantID(c)
+
+	if req.ChannelType != "personal_zalo_import" && len(req.Credentials) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "credentials_required"})
+		return
+	}
+	if req.ChannelType == "personal_zalo_import" && len(req.Credentials) == 0 {
+		req.Credentials = json.RawMessage(`{}`)
+	}
+
+	normalizedCreds, err := normalizeCreateChannelCredentials(req.ChannelType, req.Credentials)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_credentials", "details": err.Error()})
+		return
+	}
+	req.Credentials = normalizedCreds
 
 	// Encrypt credentials
 	cfg, _ := config.Load()
@@ -147,9 +169,14 @@ func CreateChannel(c *gin.Context) {
 		ExternalID:           externalID,
 		CredentialsEncrypted: credentialsToStore,
 		IsActive:             true,
-		Metadata:             func() string { if req.Metadata != "" { return req.Metadata }; return "{}" }(),
-		CreatedAt:            now,
-		UpdatedAt:            now,
+		Metadata: func() string {
+			if req.Metadata != "" {
+				return req.Metadata
+			}
+			return "{}"
+		}(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	if err := db.DB.Create(&channel).Error; err != nil {
@@ -157,7 +184,9 @@ func CreateChannel(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, channelToResponse(channel))
+	resp := channelToResponse(channel)
+	enrichPersonalZaloImportResponse(c, &resp, channel, cfg, true)
+	c.JSON(http.StatusCreated, resp)
 }
 
 func GetChannel(c *gin.Context) {
@@ -171,6 +200,8 @@ func GetChannel(c *gin.Context) {
 	}
 
 	resp := channelToResponse(channel)
+	cfg, _ := config.Load()
+	enrichPersonalZaloImportResponse(c, &resp, channel, cfg, true)
 	var convCount int64
 	db.DB.Model(&models.Conversation{}).Where("channel_id = ? AND tenant_id = ?", channelID, tenantID).Count(&convCount)
 	resp.ConversationCount = convCount
@@ -180,6 +211,12 @@ func GetChannel(c *gin.Context) {
 func UpdateChannel(c *gin.Context) {
 	tenantID := middleware.GetTenantID(c)
 	channelID := c.Param("channelId")
+
+	var channel models.Channel
+	if err := db.DB.Where("id = ? AND tenant_id = ?", channelID, tenantID).First(&channel).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "channel_not_found"})
+		return
+	}
 
 	var req struct {
 		Name     string `json:"name" binding:"omitempty,min=2,max=255"`
@@ -199,7 +236,16 @@ func UpdateChannel(c *gin.Context) {
 		updates["is_active"] = *req.IsActive
 	}
 	if req.Metadata != "" {
-		updates["metadata"] = req.Metadata
+		metadata := req.Metadata
+		if channel.ChannelType == "personal_zalo_import" {
+			mergedMetadata, err := mergePersonalZaloMetadataPreservingAccountOwners(channel.Metadata, req.Metadata)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_metadata", "details": err.Error()})
+				return
+			}
+			metadata = mergedMetadata
+		}
+		updates["metadata"] = metadata
 	}
 
 	result := db.DB.Model(&models.Channel{}).Where("id = ? AND tenant_id = ?", channelID, tenantID).Updates(updates)
@@ -435,7 +481,7 @@ type zaloTokenResponse struct {
 	AccessToken  string          `json:"access_token"`
 	RefreshToken string          `json:"refresh_token"`
 	ExpiresIn    json.RawMessage `json:"expires_in"` // Zalo returns string or int
-	Error        json.RawMessage `json:"error"`       // can be int or string
+	Error        json.RawMessage `json:"error"`      // can be int or string
 	Message      string          `json:"message"`
 }
 
@@ -514,8 +560,8 @@ func fetchZaloOAInfo(accessToken string) (*zaloOAInfo, error) {
 		Error   int    `json:"error"`
 		Message string `json:"message"`
 		Data    struct {
-			OAID   string `json:"oa_id"`
-			Name   string `json:"name"`
+			OAID string `json:"oa_id"`
+			Name string `json:"name"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -533,6 +579,13 @@ func getBaseURL(c *gin.Context) string {
 		scheme = "https"
 	}
 	return fmt.Sprintf("%s://%s", scheme, c.Request.Host)
+}
+
+func getInternalBaseURL(c *gin.Context, cfg *config.Config) string {
+	if cfg != nil && cfg.AppInternalBaseURL != "" {
+		return strings.TrimRight(cfg.AppInternalBaseURL, "/")
+	}
+	return getBaseURL(c)
 }
 
 // ReauthChannel generates an OAuth redirect URL for re-authorizing an existing channel.
@@ -597,6 +650,13 @@ func SyncChannelNow(c *gin.Context) {
 	var channel models.Channel
 	if err := db.DB.Where("id = ? AND tenant_id = ?", channelID, tenantID).First(&channel).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "channel_not_found"})
+		return
+	}
+	if channels.IsExternallyManagedImport(channel.ChannelType) {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":   "sync_managed_externally",
+			"message": "This channel is synced by the personal-zalo gateway.",
+		})
 		return
 	}
 
@@ -849,6 +909,68 @@ func channelToResponse(ch models.Channel) ChannelResponse {
 		LastSyncStatus: ch.LastSyncStatus,
 		CreatedAt:      ch.CreatedAt,
 	}
+}
+
+func normalizeCreateChannelCredentials(channelType string, raw json.RawMessage) (json.RawMessage, error) {
+	if channelType != "personal_zalo_import" {
+		return raw, nil
+	}
+
+	var creds contracts.PersonalZaloImportCredentials
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &creds); err != nil {
+			return nil, err
+		}
+	}
+	if creds.ImportSecret == "" {
+		secret, err := pkg.GenerateRandomString(32)
+		if err != nil {
+			return nil, err
+		}
+		creds.ImportSecret = secret
+	}
+
+	normalized, err := json.Marshal(creds)
+	if err != nil {
+		return nil, err
+	}
+	return normalized, nil
+}
+
+func enrichPersonalZaloImportResponse(c *gin.Context, resp *ChannelResponse, ch models.Channel, cfg *config.Config, includeSecret bool) {
+	if resp == nil || ch.ChannelType != "personal_zalo_import" || cfg == nil {
+		return
+	}
+
+	credBytes, err := pkg.Decrypt(ch.CredentialsEncrypted, cfg.EncryptionKey)
+	if err != nil {
+		return
+	}
+
+	var creds contracts.PersonalZaloImportCredentials
+	if err := json.Unmarshal(credBytes, &creds); err != nil || creds.ImportSecret == "" {
+		return
+	}
+
+	resp.ImportEndpoint = getBaseURL(c) + "/api/internal/imports/personal-zalo"
+	resp.ImportEndpointInternal = getInternalBaseURL(c, cfg) + "/api/internal/imports/personal-zalo"
+	resp.ImportSecretMasked = pkg.MaskSecret(creds.ImportSecret)
+	if includeSecret {
+		resp.ImportSecret = creds.ImportSecret
+	}
+	usersByID, err := loadTenantUsersByID(ch.TenantID)
+	if err != nil {
+		return
+	}
+	accountOwners, err := decodePersonalZaloAccountOwners(ch.Metadata)
+	if err != nil {
+		return
+	}
+	accountOwners, err = normalizePersonalZaloAccountOwners(accountOwners, usersByID)
+	if err != nil {
+		return
+	}
+	resp.AccountOwners = accountOwners
 }
 
 func GetChannelSyncHistory(c *gin.Context) {

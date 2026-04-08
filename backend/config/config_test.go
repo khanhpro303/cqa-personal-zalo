@@ -27,6 +27,9 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.DBName != "cqa" {
 		t.Errorf("Default DBName should be cqa, got %s", cfg.DBName)
 	}
+	if cfg.InternalImportSecret != cfg.JWTSecret {
+		t.Errorf("InternalImportSecret should default to JWTSecret")
+	}
 }
 
 func TestLoadConfigMissingRequired(t *testing.T) {

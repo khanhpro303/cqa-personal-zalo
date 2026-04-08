@@ -70,9 +70,9 @@ func AutoMigrate() error {
 
 func addUniqueConstraints() {
 	constraints := []struct {
-		table      string
-		name       string
-		columns    string
+		table   string
+		name    string
+		columns string
 	}{
 		{"channels", "uq_channel_tenant_type_ext", "tenant_id, channel_type, external_id"},
 		{"conversations", "uq_conv_tenant_channel_ext", "tenant_id, channel_id, external_conversation_id"},
@@ -80,13 +80,38 @@ func addUniqueConstraints() {
 	}
 
 	for _, c := range constraints {
+		exists, err := uniqueIndexExists(c.table, c.name)
+		if err != nil {
+			log.Printf("[db] failed to check index %s on %s: %v", c.name, c.table, err)
+			continue
+		}
+		if exists {
+			continue
+		}
+
 		sql := fmt.Sprintf(
 			"ALTER TABLE `%s` ADD UNIQUE INDEX `%s` (%s)",
 			c.table, c.name, c.columns,
 		)
-		// Ignore errors if constraint already exists
-		DB.Exec(sql)
+		if err := DB.Exec(sql).Error; err != nil {
+			log.Printf("[db] failed to create unique index %s on %s: %v", c.name, c.table, err)
+		}
 	}
+}
+
+func uniqueIndexExists(tableName, indexName string) (bool, error) {
+	var count int64
+	err := DB.Raw(`
+		SELECT COUNT(1)
+		FROM information_schema.statistics
+		WHERE table_schema = DATABASE()
+		  AND table_name = ?
+		  AND index_name = ?
+	`, tableName, indexName).Scan(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func Close() {

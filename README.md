@@ -19,6 +19,7 @@ Hệ thống phân tích chất lượng chăm sóc khách hàng bằng AI. Tự
 - **Dashboard** với biểu đồ, thống kê, cảnh báo gần đây
 - **Multi-tenant** — nhiều công ty trên 1 hệ thống, phân quyền Owner > Admin > Member
 - **Tích hợp MCP** cho Claude Web/Desktop
+- **Personal Zalo Gateway** để ingest Zalo cá nhân qua QR/session sidecar
 - **SSL tự động** qua Let's Encrypt (tùy chọn)
 
 ## Cài đặt nhanh
@@ -100,6 +101,7 @@ chat-quality-agent/
 │   ├── mcp/            # MCP server cho Claude
 │   └── notifications/  # Telegram + Email
 ├── frontend/           # Vue 3 SPA
+├── personal-zalo-gateway/ # Sidecar TypeScript cho Zalo cá nhân
 ├── docker/             # Nginx + SSL configs
 ├── docs/               # Tài liệu hướng dẫn (VitePress)
 ├── docker-compose.yml      # Build từ source
@@ -115,6 +117,20 @@ chat-quality-agent/
 4. **Tạo công việc**: Công việc > Tạo mới > Wizard 6 bước
 5. **Chạy phân tích**: Chi tiết công việc > Chạy thử hoặc Chạy ngay
 6. **Xem kết quả**: Chi tiết công việc > Kết quả đánh giá
+
+## Personal Zalo Gateway
+
+`personal-zalo-gateway` là sidecar riêng cho `Zalo cá nhân`. Nó giữ toàn bộ logic `QR login / session / reconnect / listener`, sau đó ký HMAC và import dữ liệu vào endpoint nội bộ `/api/internal/imports/personal-zalo` của CQA.
+
+Luồng tối thiểu:
+
+1. Tạo kênh `Personal Zalo Import` trong CQA.
+2. Lấy `import endpoint` và `import secret` ở trang chi tiết kênh.
+3. Tạo account trong gateway với `tenantId`, `channelId`, `importEndpoint`, `importSecret`.
+4. Gọi `POST /api/v1/accounts/:accountId/login/qr` trên gateway và poll `GET /api/v1/accounts/:accountId` để lấy `qrImage`.
+5. Sau khi account connected, gateway tự nghe message mới và flush theo batch định kỳ sang CQA.
+
+Gateway hiện chạy mặc định ở `http://localhost:3100`.
 
 ## Biến môi trường
 

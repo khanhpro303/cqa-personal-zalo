@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-co-op/gocron/v2"
+	"github.com/vietbui/chat-quality-agent/channels"
 	"github.com/vietbui/chat-quality-agent/config"
 	"github.com/vietbui/chat-quality-agent/db"
 	"github.com/vietbui/chat-quality-agent/db/models"
@@ -112,6 +113,10 @@ func (s *Scheduler) syncAllChannelsTask() {
 	now := time.Now()
 	synced := 0
 	for _, ch := range chans {
+		if channels.IsExternallyManagedImport(ch.ChannelType) {
+			continue
+		}
+
 		// Check per-channel sync interval from metadata
 		interval := 15 // default 15 minutes
 		if ch.Metadata != "" {

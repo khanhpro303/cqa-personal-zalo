@@ -5,7 +5,7 @@ import "time"
 type Channel struct {
 	ID                   string     `gorm:"type:char(36);primaryKey" json:"id"`
 	TenantID             string     `gorm:"type:char(36);not null;index:idx_channel_tenant_active" json:"tenant_id"`
-	ChannelType          string     `gorm:"type:varchar(20);not null" json:"channel_type"` // zalo_oa | facebook
+	ChannelType          string     `gorm:"type:varchar(32);not null" json:"channel_type"` // zalo_oa | facebook | personal_zalo_import
 	Name                 string     `gorm:"type:varchar(255);not null" json:"name"`
 	ExternalID           string     `gorm:"type:varchar(255)" json:"external_id"`
 	CredentialsEncrypted []byte     `gorm:"type:varbinary(2048);not null" json:"-"`

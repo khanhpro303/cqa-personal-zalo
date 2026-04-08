@@ -11,16 +11,19 @@
       <v-col v-for="ch in channelStore.channels" :key="ch.id" cols="12" sm="6" md="4">
         <v-card class="pa-4" style="cursor: pointer" @click="router.push(`/${tenantId}/channels/${ch.id}`)">
           <div class="d-flex align-center mb-3">
-            <v-icon :color="ch.channel_type === 'zalo_oa' ? 'blue' : 'indigo'" size="32" class="mr-3">
-              {{ ch.channel_type === 'zalo_oa' ? 'mdi-message-text' : 'mdi-facebook-messenger' }}
+            <v-icon :color="channelColor(ch.channel_type)" size="32" class="mr-3">
+              {{ channelIcon(ch.channel_type) }}
             </v-icon>
             <div class="flex-grow-1">
               <div class="text-subtitle-1 font-weight-bold">{{ ch.name }}</div>
-              <v-chip size="x-small" :color="ch.channel_type === 'zalo_oa' ? 'blue' : 'indigo'" variant="tonal">
-                {{ ch.channel_type === 'zalo_oa' ? $t('channel_zalo') : $t('channel_facebook') }}
+              <v-chip size="x-small" :color="channelColor(ch.channel_type)" variant="tonal">
+                {{ channelLabel(ch.channel_type) }}
               </v-chip>
               <div v-if="ch.channel_type === 'zalo_oa' && ch.external_id" class="text-caption text-grey mt-1" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                 OA: {{ ch.external_id }}
+              </div>
+              <div v-else-if="ch.channel_type === 'personal_zalo_import' && ch.external_id" class="text-caption text-grey mt-1" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                Account: {{ ch.external_id }}
               </div>
             </div>
             <div class="text-right">
@@ -48,13 +51,13 @@
 
           <v-divider class="mb-3" />
           <div class="d-flex ga-2 flex-wrap" @click.stop>
-            <v-btn size="small" variant="tonal" color="primary" prepend-icon="mdi-sync" :loading="syncing === ch.id" @click="syncNow(ch.id)">
+            <v-btn v-if="ch.channel_type !== 'personal_zalo_import'" size="small" variant="tonal" color="primary" prepend-icon="mdi-sync" :loading="syncing === ch.id" @click="syncNow(ch.id)">
               {{ $t('sync_now') }}
             </v-btn>
-            <v-btn v-if="ch.last_sync_status === 'error'" size="small" variant="tonal" color="warning" prepend-icon="mdi-link-variant" :loading="reauthing === ch.id" @click="reauthChannel(ch.id)">
+            <v-btn v-if="ch.channel_type !== 'personal_zalo_import' && ch.last_sync_status === 'error'" size="small" variant="tonal" color="warning" prepend-icon="mdi-link-variant" :loading="reauthing === ch.id" @click="reauthChannel(ch.id)">
               Kết nối lại
             </v-btn>
-            <v-btn size="small" variant="text" color="primary" @click="testConn(ch.id)">
+            <v-btn v-if="ch.channel_type !== 'personal_zalo_import'" size="small" variant="text" color="primary" @click="testConn(ch.id)">
               {{ $t('test_connection') }}
             </v-btn>
             <v-spacer />
@@ -69,7 +72,7 @@
       <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-chat-plus</v-icon>
       <div class="text-h6 text-grey-darken-1 mb-2">Chưa có kênh chat nào</div>
       <div class="text-body-2 text-grey mb-4" style="max-width: 500px; margin: 0 auto;">
-        Kết nối kênh chat Facebook, Zalo OA để hệ thống đồng bộ tin nhắn và AI phân tích chất lượng CSKH.
+        Kết nối Facebook, Zalo OA hoặc tạo kênh Personal Zalo để sidecar import dữ liệu vào hệ thống AI phân tích chất lượng CSKH.
       </div>
       <v-btn color="primary" prepend-icon="mdi-plus" @click="showDialog = true">Kết nối kênh</v-btn>
     </div>
@@ -81,7 +84,11 @@
         <v-select
           v-model="newChannel.channel_type"
           :label="$t('channel_type')"
-          :items="[{ title: $t('channel_zalo'), value: 'zalo_oa' }, { title: $t('channel_facebook'), value: 'facebook' }]"
+          :items="[
+            { title: $t('channel_zalo'), value: 'zalo_oa' },
+            { title: $t('channel_facebook'), value: 'facebook' },
+            { title: 'Personal Zalo Import', value: 'personal_zalo_import' },
+          ]"
           class="mb-3"
         />
         <v-text-field v-model="newChannel.name" :label="$t('channel_name')" class="mb-3" />
@@ -100,36 +107,44 @@
         </template>
 
         <!-- Facebook -->
-        <template v-else>
+        <template v-else-if="newChannel.channel_type === 'facebook'">
           <v-btn variant="tonal" color="info" prepend-icon="mdi-book-open-variant" href="https://tanviet12.github.io/chat-quality-agent/usage/facebook.html" target="_blank" class="mb-3">
             Hướng dẫn kết nối Facebook Fanpage
           </v-btn>
           <v-text-field v-model="newChannel.creds.page_id" :label="$t('fb_page_id')" density="compact" class="mb-2" hint="Page ID từ Cài đặt trang Facebook" persistent-hint />
           <v-text-field v-model="newChannel.creds.access_token" :label="$t('fb_access_token')" density="compact" class="mb-2" hint="Page Access Token (nên dùng long-lived token)" persistent-hint />
         </template>
+        <template v-else>
+          <v-alert type="info" variant="tonal" class="mb-3">
+            Kênh này dành cho sidecar `personal-zalo-gateway` import dữ liệu vào `chat-quality-agent`.
+            Sau khi tạo, bạn sẽ lấy `import endpoint` và `import secret` ở màn hình chi tiết kênh.
+          </v-alert>
+        </template>
 
         <!-- Sync settings -->
-        <v-divider class="my-3" />
-        <v-select
-          v-model="newChannel.sync_interval"
-          :items="syncIntervalOptions"
-          label="Chu kỳ đồng bộ"
-          density="compact"
-          class="mb-3"
-          hint="Khoảng thời gian giữa mỗi lần tự động đồng bộ tin nhắn"
-          persistent-hint
-        />
-        <v-alert v-if="newChannel.sync_interval <= 5" type="warning" variant="tonal" density="compact" class="mb-3">
-          Đồng bộ quá thường xuyên có thể bị giới hạn bởi API của nền tảng.
-        </v-alert>
-        <v-switch
-          v-model="newChannel.sync_files"
-          label="Lưu trữ file/ảnh từ cuộc chat"
-          hint="Tải và lưu file, ảnh từ cuộc chat lên server. Tăng dung lượng lưu trữ."
-          persistent-hint
-          density="compact"
-          color="primary"
-        />
+        <template v-if="newChannel.channel_type !== 'personal_zalo_import'">
+          <v-divider class="my-3" />
+          <v-select
+            v-model="newChannel.sync_interval"
+            :items="syncIntervalOptions"
+            label="Chu kỳ đồng bộ"
+            density="compact"
+            class="mb-3"
+            hint="Khoảng thời gian giữa mỗi lần tự động đồng bộ tin nhắn"
+            persistent-hint
+          />
+          <v-alert v-if="newChannel.sync_interval <= 5" type="warning" variant="tonal" density="compact" class="mb-3">
+            Đồng bộ quá thường xuyên có thể bị giới hạn bởi API của nền tảng.
+          </v-alert>
+          <v-switch
+            v-model="newChannel.sync_files"
+            label="Lưu trữ file/ảnh từ cuộc chat"
+            hint="Tải và lưu file, ảnh từ cuộc chat lên server. Tăng dung lượng lưu trữ."
+            persistent-hint
+            density="compact"
+            color="primary"
+          />
+        </template>
 
         <v-card-actions class="mt-4 px-0">
           <v-spacer />
@@ -142,6 +157,15 @@
             @click="createAndAuthZalo"
           >
             {{ $t('zalo_authorize') }}
+          </v-btn>
+          <v-btn
+            v-else-if="newChannel.channel_type === 'personal_zalo_import'"
+            color="teal"
+            :loading="creating"
+            :disabled="!newChannel.name"
+            @click="createPersonalZalo"
+          >
+            Tạo kênh Personal Zalo
           </v-btn>
           <v-btn
             v-else
@@ -162,19 +186,21 @@
         <v-card-title>Sửa kênh chat</v-card-title>
         <v-text-field v-model="editForm.name" label="Tên kênh" class="mb-3" />
         <v-switch v-model="editForm.is_active" label="Hoạt động" color="primary" density="compact" class="mb-3" />
-        <v-select
-          v-model="editForm.sync_interval"
-          :items="syncIntervalOptions"
-          label="Chu kỳ đồng bộ"
-          density="compact"
-          class="mb-3"
-          hint="Khoảng thời gian giữa mỗi lần tự động đồng bộ tin nhắn"
-          persistent-hint
-        />
-        <v-alert v-if="editForm.sync_interval <= 5" type="warning" variant="tonal" density="compact" class="mb-3">
-          Đồng bộ quá thường xuyên có thể bị giới hạn bởi API của nền tảng (Facebook/Zalo).
-        </v-alert>
-        <v-switch v-model="editForm.sync_files" label="Lưu trữ file/ảnh từ cuộc chat" color="primary" density="compact" hint="Tải và lưu file, ảnh từ cuộc chat lên server." persistent-hint />
+        <template v-if="editChannelType !== 'personal_zalo_import'">
+          <v-select
+            v-model="editForm.sync_interval"
+            :items="syncIntervalOptions"
+            label="Chu kỳ đồng bộ"
+            density="compact"
+            class="mb-3"
+            hint="Khoảng thời gian giữa mỗi lần tự động đồng bộ tin nhắn"
+            persistent-hint
+          />
+          <v-alert v-if="editForm.sync_interval <= 5" type="warning" variant="tonal" density="compact" class="mb-3">
+            Đồng bộ quá thường xuyên có thể bị giới hạn bởi API của nền tảng (Facebook/Zalo).
+          </v-alert>
+          <v-switch v-model="editForm.sync_files" label="Lưu trữ file/ảnh từ cuộc chat" color="primary" density="compact" hint="Tải và lưu file, ảnh từ cuộc chat lên server." persistent-hint />
+        </template>
         <v-card-actions class="mt-4 px-0">
           <v-spacer />
           <v-btn variant="text" @click="editDialog = false">{{ $t('cancel') }}</v-btn>
@@ -304,6 +330,31 @@ async function createFacebook() {
   }
 }
 
+async function createPersonalZalo() {
+  creating.value = true
+  try {
+    const created = await channelStore.createChannel(tenantId.value, {
+      channel_type: 'personal_zalo_import',
+      name: newChannel.name,
+      credentials: {},
+      metadata: JSON.stringify({}),
+    })
+    showDialog.value = false
+    newChannel.name = ''
+    newChannel.creds = {}
+    showSnack('Đã tạo kênh Personal Zalo', 'success')
+    await channelStore.fetchChannels(tenantId.value)
+    const channelId = created?.id || created?.data?.id
+    if (channelId) {
+      router.push(`/${tenantId.value}/channels/${channelId}`)
+    }
+  } catch {
+    showSnack(t('error'), 'error')
+  } finally {
+    creating.value = false
+  }
+}
+
 
 async function syncNow(channelId: string) {
   syncing.value = channelId
@@ -362,12 +413,31 @@ function showSnack(text: string, color: string) {
   snackbar.value = true
 }
 
+function channelIcon(channelType: string) {
+  if (channelType === 'zalo_oa') return 'mdi-message-text'
+  if (channelType === 'facebook') return 'mdi-facebook-messenger'
+  return 'mdi-cellphone-link'
+}
+
+function channelColor(channelType: string) {
+  if (channelType === 'zalo_oa') return 'blue'
+  if (channelType === 'facebook') return 'indigo'
+  return 'teal'
+}
+
+function channelLabel(channelType: string) {
+  if (channelType === 'zalo_oa') return t('channel_zalo')
+  if (channelType === 'facebook') return t('channel_facebook')
+  return 'Personal Zalo'
+}
+
 
 
 // Edit channel
 const editDialog = ref(false)
 const savingEdit = ref(false)
 const editChannelId = ref('')
+const editChannelType = ref('')
 const editForm = reactive({ name: '', is_active: true, sync_files: false, sync_interval: 15 })
 const syncIntervalOptions = [
   { title: 'Mỗi 1 phút', value: 1 },
@@ -382,6 +452,7 @@ const syncIntervalOptions = [
 
 function openEdit(ch: any) {
   editChannelId.value = ch.id
+  editChannelType.value = ch.channel_type
   editForm.name = ch.name
   editForm.is_active = ch.is_active
   try {
@@ -398,11 +469,14 @@ function openEdit(ch: any) {
 async function saveEdit() {
   savingEdit.value = true
   try {
-    await channelStore.updateChannel(tenantId.value, editChannelId.value, {
+    const payload: Record<string, unknown> = {
       name: editForm.name,
       is_active: editForm.is_active,
-      metadata: JSON.stringify({ sync_files: editForm.sync_files, sync_interval: editForm.sync_interval }),
-    })
+    }
+    if (editChannelType.value !== 'personal_zalo_import') {
+      payload.metadata = JSON.stringify({ sync_files: editForm.sync_files, sync_interval: editForm.sync_interval })
+    }
+    await channelStore.updateChannel(tenantId.value, editChannelId.value, payload)
     editDialog.value = false
     showSnack(t('success'), 'success')
     channelStore.fetchChannels(tenantId.value)

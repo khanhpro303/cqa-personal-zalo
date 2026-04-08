@@ -10,6 +10,11 @@ export interface Conversation {
   customer_name: string
   last_message_at: string | null
   message_count: number
+  thread_type?: string
+  account_external_id?: string
+  owner_user_id?: string
+  owner_name?: string
+  owner_email?: string
   created_at: string
 }
 

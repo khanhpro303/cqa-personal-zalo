@@ -14,11 +14,48 @@ export interface Channel {
   last_sync_status: string
   last_sync_error?: string
   conversation_count: number
+  import_endpoint?: string
+  import_endpoint_internal?: string
+  import_secret?: string
+  import_secret_masked?: string
+  account_owners?: PersonalZaloAccountOwner[]
   created_at: string
+}
+
+export interface PersonalZaloAccountOwner {
+  account_external_id: string
+  user_id: string
+  user_name?: string
+  user_email?: string
+}
+
+export interface PersonalZaloGatewayAccount {
+  id: string
+  account_external_id?: string
+  status: 'connected' | 'disconnected' | 'qr_pending' | 'connecting'
+  display_name?: string
+  avatar_url?: string
+  zalo_uid?: string
+  qr_image?: string
+  qr_generated_at?: string
+  last_error?: string
+  last_imported_at?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface PersonalZaloGatewayState {
+  gateway_configured: boolean
+  gateway_reachable: boolean
+  account_exists: boolean
+  next_action?: string
+  message?: string
+  account?: PersonalZaloGatewayAccount
 }
 
 export const useChannelStore = defineStore('channels', () => {
   const channels = ref<Channel[]>([])
+  const accountOwners = ref<PersonalZaloAccountOwner[]>([])
 
   async function fetchChannels(tenantId: string) {
     const { data } = await api.get(`/tenants/${tenantId}/channels`)
@@ -74,5 +111,61 @@ export const useChannelStore = defineStore('channels', () => {
     return data
   }
 
-  return { channels, currentChannel, syncHistory, syncHistoryTotal, fetchChannels, fetchChannel, createChannel, updateChannel, deleteChannel, testConnection, syncChannel, fetchSyncHistory, purgeConversations }
+  async function fetchAccountOwners(tenantId: string, channelId: string) {
+    const { data } = await api.get(`/tenants/${tenantId}/channels/${channelId}/account-owners`)
+    accountOwners.value = data.account_owners || []
+    return accountOwners.value
+  }
+
+  async function updateAccountOwners(tenantId: string, channelId: string, owners: PersonalZaloAccountOwner[]) {
+    const { data } = await api.put(`/tenants/${tenantId}/channels/${channelId}/account-owners`, { account_owners: owners })
+    accountOwners.value = data.account_owners || []
+    if (currentChannel.value) {
+      currentChannel.value.account_owners = accountOwners.value
+    }
+    return accountOwners.value
+  }
+
+  async function fetchPersonalZaloGatewayState(tenantId: string, channelId: string): Promise<PersonalZaloGatewayState> {
+    const { data } = await api.get(`/tenants/${tenantId}/channels/${channelId}/personal-zalo-gateway`)
+    return data
+  }
+
+  async function connectPersonalZaloGateway(tenantId: string, channelId: string): Promise<PersonalZaloGatewayState> {
+    const { data } = await api.post(`/tenants/${tenantId}/channels/${channelId}/personal-zalo-gateway/connect`)
+    return data
+  }
+
+  async function reconnectPersonalZaloGateway(tenantId: string, channelId: string): Promise<PersonalZaloGatewayState> {
+    const { data } = await api.post(`/tenants/${tenantId}/channels/${channelId}/personal-zalo-gateway/reconnect`)
+    return data
+  }
+
+  async function syncPersonalZaloGateway(tenantId: string, channelId: string): Promise<PersonalZaloGatewayState> {
+    const { data } = await api.post(`/tenants/${tenantId}/channels/${channelId}/personal-zalo-gateway/sync`)
+    return data.state || data
+  }
+
+  return {
+    channels,
+    currentChannel,
+    syncHistory,
+    syncHistoryTotal,
+    accountOwners,
+    fetchChannels,
+    fetchChannel,
+    createChannel,
+    updateChannel,
+    deleteChannel,
+    testConnection,
+    syncChannel,
+    fetchSyncHistory,
+    purgeConversations,
+    fetchAccountOwners,
+    updateAccountOwners,
+    fetchPersonalZaloGatewayState,
+    connectPersonalZaloGateway,
+    reconnectPersonalZaloGateway,
+    syncPersonalZaloGateway,
+  }
 })

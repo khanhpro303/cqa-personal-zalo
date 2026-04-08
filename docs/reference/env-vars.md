@@ -48,6 +48,15 @@ Danh sách đầy đủ các biến môi trường trong file `.env`.
 Để trống `LEGO_DOMAIN` nếu bạn không cần SSL hoặc đã có reverse proxy riêng (Cloudflare, Caddy...).
 :::
 
+## Personal Zalo Gateway (tùy chọn)
+
+| Biến | Mô tả | Mặc định |
+|------|-------|----------|
+| `PERSONAL_ZALO_GATEWAY_SYNC_INTERVAL_SEC` | Chu kỳ flush batch từ gateway sang CQA | `900` |
+| `PERSONAL_ZALO_GATEWAY_MAX_BATCH_CONVERSATIONS` | Số conversation tối đa trong một lần import | `20` |
+| `PERSONAL_ZALO_GATEWAY_MAX_MESSAGES_PER_CONVERSATION` | Số message tối đa mỗi conversation trong một batch | `200` |
+| `PERSONAL_ZALO_GATEWAY_REQUEST_TIMEOUT_MS` | Timeout gọi import endpoint nội bộ | `20000` |
+
 ## Tạo giá trị bảo mật
 
 ```bash

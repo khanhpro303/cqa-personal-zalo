@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -85,14 +86,19 @@ func ListConversations(c *gin.Context) {
 	}
 
 	type ConvResponse struct {
-		ID             string  `json:"id"`
-		ChannelID      string  `json:"channel_id"`
-		ChannelName    string  `json:"channel_name"`
-		ChannelType    string  `json:"channel_type"`
-		CustomerName   string  `json:"customer_name"`
-		LastMessageAt  *string `json:"last_message_at"`
-		MessageCount   int     `json:"message_count"`
-		CreatedAt      string  `json:"created_at"`
+		ID                string  `json:"id"`
+		ChannelID         string  `json:"channel_id"`
+		ChannelName       string  `json:"channel_name"`
+		ChannelType       string  `json:"channel_type"`
+		CustomerName      string  `json:"customer_name"`
+		LastMessageAt     *string `json:"last_message_at"`
+		MessageCount      int     `json:"message_count"`
+		ThreadType        string  `json:"thread_type,omitempty"`
+		AccountExternalID string  `json:"account_external_id,omitempty"`
+		OwnerUserID       string  `json:"owner_user_id,omitempty"`
+		OwnerName         string  `json:"owner_name,omitempty"`
+		OwnerEmail        string  `json:"owner_email,omitempty"`
+		CreatedAt         string  `json:"created_at"`
 	}
 
 	results := make([]ConvResponse, len(conversations))
@@ -103,15 +109,21 @@ func ListConversations(c *gin.Context) {
 			lastMsg = &s
 		}
 		ch := channelMap[conv.ChannelID]
+		meta := parseConversationMetadata(conv.Metadata)
 		results[i] = ConvResponse{
-			ID:            conv.ID,
-			ChannelID:     conv.ChannelID,
-			ChannelName:   ch.Name,
-			ChannelType:   ch.ChannelType,
-			CustomerName:  conv.CustomerName,
-			LastMessageAt: lastMsg,
-			MessageCount:  conv.MessageCount,
-			CreatedAt:     conv.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			ID:                conv.ID,
+			ChannelID:         conv.ChannelID,
+			ChannelName:       ch.Name,
+			ChannelType:       ch.ChannelType,
+			CustomerName:      conv.CustomerName,
+			LastMessageAt:     lastMsg,
+			MessageCount:      conv.MessageCount,
+			ThreadType:        meta.ThreadType,
+			AccountExternalID: meta.AccountExternalID,
+			OwnerUserID:       meta.OwnerUserID,
+			OwnerName:         meta.OwnerName,
+			OwnerEmail:        meta.OwnerEmail,
+			CreatedAt:         conv.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		}
 	}
 
@@ -164,12 +176,53 @@ func GetConversationMessages(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"conversation": gin.H{
-			"id":            conv.ID,
-			"customer_name": conv.CustomerName,
-			"message_count": conv.MessageCount,
+			"id":                  conv.ID,
+			"customer_name":       conv.CustomerName,
+			"message_count":       conv.MessageCount,
+			"thread_type":         parseConversationMetadata(conv.Metadata).ThreadType,
+			"account_external_id": parseConversationMetadata(conv.Metadata).AccountExternalID,
+			"owner_user_id":       parseConversationMetadata(conv.Metadata).OwnerUserID,
+			"owner_name":          parseConversationMetadata(conv.Metadata).OwnerName,
+			"owner_email":         parseConversationMetadata(conv.Metadata).OwnerEmail,
 		},
 		"messages": results,
 	})
+}
+
+type conversationMetadataView struct {
+	ThreadType        string
+	AccountExternalID string
+	OwnerUserID       string
+	OwnerName         string
+	OwnerEmail        string
+}
+
+func parseConversationMetadata(raw string) conversationMetadataView {
+	if strings.TrimSpace(raw) == "" {
+		return conversationMetadataView{}
+	}
+
+	var metadata map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &metadata); err != nil {
+		return conversationMetadataView{}
+	}
+
+	view := conversationMetadataView{
+		ThreadType:        metadataString(metadata["thread_type"]),
+		AccountExternalID: metadataString(metadata["account_external_id"]),
+		OwnerUserID:       metadataString(metadata["owner_user_id"]),
+		OwnerName:         metadataString(metadata["owner_name"]),
+		OwnerEmail:        metadataString(metadata["owner_email"]),
+	}
+	if view.ThreadType == "" {
+		view.ThreadType = "user"
+	}
+	return view
+}
+
+func metadataString(value interface{}) string {
+	s, _ := value.(string)
+	return s
 }
 
 // ListEvaluatedConversations returns a map of conversation_id -> verdict for all evaluated conversations.

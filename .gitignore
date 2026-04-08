@@ -5,9 +5,11 @@
 
 # Dependencies
 frontend/node_modules/
+personal-zalo-gateway/node_modules/
 
 # Build outputs
 frontend/dist/
+personal-zalo-gateway/dist/
 
 # Go
 backend/cqa-server
@@ -34,6 +36,7 @@ docs/.vitepress/cache/
 # Internal / private files
 PRD.md
 code-review-*
+.tmp/
 
 # Claude Code
 .claude/

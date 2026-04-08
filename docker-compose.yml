@@ -32,6 +32,8 @@ services:
       - DB_HOST=db
       - DB_PORT=3306
       - TZ=Asia/Ho_Chi_Minh
+      - APP_INTERNAL_BASE_URL=${APP_INTERNAL_BASE_URL:-http://app:8080}
+      - PERSONAL_ZALO_GATEWAY_BASE_URL=${PERSONAL_ZALO_GATEWAY_BASE_URL:-http://personal-zalo-gateway:3100}
     depends_on:
       db:
         condition: service_healthy
@@ -41,6 +43,29 @@ services:
       - /tmp
     security_opt:
       - no-new-privileges:true
+
+  personal-zalo-gateway:
+    build:
+      context: ./personal-zalo-gateway
+    container_name: cqa-personal-zalo-gateway
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PERSONAL_ZALO_GATEWAY_HOST=0.0.0.0
+      - PERSONAL_ZALO_GATEWAY_PORT=3100
+      - PERSONAL_ZALO_GATEWAY_DATA_DIR=/var/lib/personal-zalo-gateway
+      - PERSONAL_ZALO_GATEWAY_SYNC_INTERVAL_SEC=${PERSONAL_ZALO_GATEWAY_SYNC_INTERVAL_SEC:-900}
+      - PERSONAL_ZALO_GATEWAY_MAX_BATCH_CONVERSATIONS=${PERSONAL_ZALO_GATEWAY_MAX_BATCH_CONVERSATIONS:-20}
+      - PERSONAL_ZALO_GATEWAY_MAX_MESSAGES_PER_CONVERSATION=${PERSONAL_ZALO_GATEWAY_MAX_MESSAGES_PER_CONVERSATION:-200}
+      - PERSONAL_ZALO_GATEWAY_REQUEST_TIMEOUT_MS=${PERSONAL_ZALO_GATEWAY_REQUEST_TIMEOUT_MS:-20000}
+    ports:
+      - "3100:3100"
+    volumes:
+      - personal_zalo_gateway_data:/var/lib/personal-zalo-gateway
+    depends_on:
+      - app
 
   db:
     image: mysql:8.0
@@ -68,5 +93,6 @@ services:
 volumes:
   mysql_data:
   file_storage:
+  personal_zalo_gateway_data:
   lego_certs:
   lego_webroot:

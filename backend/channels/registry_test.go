@@ -39,3 +39,24 @@ func TestNewAdapterInvalidJSON(t *testing.T) {
 		t.Fatal("Should fail for invalid JSON")
 	}
 }
+
+func TestSupportsPullSync(t *testing.T) {
+	if !SupportsPullSync("zalo_oa") {
+		t.Fatal("zalo_oa should support pull sync")
+	}
+	if !SupportsPullSync("facebook") {
+		t.Fatal("facebook should support pull sync")
+	}
+	if SupportsPullSync("personal_zalo_import") {
+		t.Fatal("personal_zalo_import should not support pull sync")
+	}
+}
+
+func TestIsExternallyManagedImport(t *testing.T) {
+	if !IsExternallyManagedImport("personal_zalo_import") {
+		t.Fatal("personal_zalo_import should be marked as externally managed")
+	}
+	if IsExternallyManagedImport("facebook") {
+		t.Fatal("facebook should not be marked as externally managed")
+	}
+}

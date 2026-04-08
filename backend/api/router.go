@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/vietbui/chat-quality-agent/api/handlers"
@@ -12,6 +13,7 @@ import (
 	"github.com/vietbui/chat-quality-agent/config"
 	"github.com/vietbui/chat-quality-agent/db"
 	"github.com/vietbui/chat-quality-agent/db/models"
+	"github.com/vietbui/chat-quality-agent/engine"
 	"github.com/vietbui/chat-quality-agent/mcp"
 )
 
@@ -110,6 +112,15 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 	api.GET("/channels/zalo/callback", handlers.ZaloOAuthCallback)
 	api.GET("/channels/facebook/callback", handlers.FacebookOAuthCallback)
 
+	internal := r.Group("/api/internal")
+	internal.Use(middleware.InternalHMACAuth(
+		middleware.PersonalZaloImportSecretResolver(cfg.EncryptionKey, cfg.InternalImportSecret),
+		5*time.Minute,
+	))
+	{
+		internal.POST("/imports/personal-zalo", handlers.NewPersonalZaloImportHandler(engine.NewIngestService()))
+	}
+
 	// Authenticated API
 	authed := api.Group("")
 	authed.Use(middleware.JWTAuth())
@@ -137,6 +148,12 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 			tenant.GET("/channels/:channelId", middleware.RequirePermission("channels", "r"), handlers.GetChannel)
 			tenant.PUT("/channels/:channelId", middleware.RequirePermission("channels", "w"), handlers.UpdateChannel)
 			tenant.DELETE("/channels/:channelId", middleware.RequirePermission("channels", "d"), handlers.DeleteChannel)
+			tenant.GET("/channels/:channelId/account-owners", middleware.RequirePermission("channels", "r"), handlers.GetPersonalZaloAccountOwners)
+			tenant.PUT("/channels/:channelId/account-owners", middleware.RequirePermission("channels", "w"), handlers.PutPersonalZaloAccountOwners)
+			tenant.GET("/channels/:channelId/personal-zalo-gateway", middleware.RequirePermission("channels", "r"), handlers.GetPersonalZaloGatewayState)
+			tenant.POST("/channels/:channelId/personal-zalo-gateway/connect", middleware.RequirePermission("channels", "w"), handlers.ConnectPersonalZaloGateway)
+			tenant.POST("/channels/:channelId/personal-zalo-gateway/reconnect", middleware.RequirePermission("channels", "w"), handlers.ReconnectPersonalZaloGateway)
+			tenant.POST("/channels/:channelId/personal-zalo-gateway/sync", middleware.RequirePermission("channels", "w"), handlers.SyncPersonalZaloGateway)
 			tenant.POST("/channels/:channelId/test", middleware.RequirePermission("channels", "r"), handlers.TestChannelConnection)
 			tenant.POST("/channels/:channelId/sync", middleware.RequirePermission("channels", "w"), handlers.SyncChannelNow)
 			tenant.POST("/channels/:channelId/reauth", middleware.RequirePermission("channels", "w"), handlers.ReauthChannel)

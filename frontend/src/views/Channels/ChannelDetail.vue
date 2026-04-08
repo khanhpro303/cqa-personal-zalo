@@ -7,10 +7,10 @@
       <v-spacer />
       <template v-if="authStore.canEdit('channels')">
         <v-btn variant="outlined" prepend-icon="mdi-pencil" size="small" @click="editDialog = true">{{ $t('edit') }}</v-btn>
-        <v-btn color="primary" prepend-icon="mdi-sync" size="small" :loading="syncing" @click="doSync">
+        <v-btn v-if="channel.channel_type !== 'personal_zalo_import'" color="primary" prepend-icon="mdi-sync" size="small" :loading="syncing" @click="doSync">
           {{ $t('sync_now') || 'Dong bo ngay' }}
         </v-btn>
-        <v-btn variant="outlined" prepend-icon="mdi-connection" size="small" :loading="testing" @click="doTest">
+        <v-btn v-if="channel.channel_type !== 'personal_zalo_import'" variant="outlined" prepend-icon="mdi-connection" size="small" :loading="testing" @click="doTest">
           Kiểm tra kết nối
         </v-btn>
         <v-btn color="warning" variant="outlined" prepend-icon="mdi-delete-sweep" size="small" @click="confirmPurge = true">
@@ -29,8 +29,8 @@
       <v-row>
         <v-col cols="6" sm="3">
           <div class="text-caption text-grey">Loại kênh</div>
-          <v-chip size="small" :color="channel.channel_type === 'facebook' ? 'blue' : 'green'" variant="tonal">
-            {{ channel.channel_type === 'facebook' ? 'Facebook' : 'Zalo OA' }}
+          <v-chip size="small" :color="channelTypeColor(channel.channel_type)" variant="tonal">
+            {{ channelTypeLabel(channel.channel_type) }}
           </v-chip>
         </v-col>
         <v-col cols="6" sm="3">
@@ -55,21 +55,232 @@
             {{ channel.conversation_count || 0 }}
           </a>
         </v-col>
-        <v-col cols="6" sm="3">
-          <div class="text-caption text-grey">Chu kỳ đồng bộ</div>
-          <div>{{ formatSyncInterval(metadata.sync_interval) }}</div>
-        </v-col>
-        <v-col cols="6" sm="3">
-          <div class="text-caption text-grey">Lưu file/ảnh</div>
-          <v-chip size="small" :color="metadata.sync_files ? 'success' : 'grey'" variant="tonal">
-            {{ metadata.sync_files ? 'Bật' : 'Tắt' }}
-          </v-chip>
-        </v-col>
+        <template v-if="channel.channel_type !== 'personal_zalo_import'">
+          <v-col cols="6" sm="3">
+            <div class="text-caption text-grey">Chu kỳ đồng bộ</div>
+            <div>{{ formatSyncInterval(metadata.sync_interval) }}</div>
+          </v-col>
+          <v-col cols="6" sm="3">
+            <div class="text-caption text-grey">Lưu file/ảnh</div>
+            <v-chip size="small" :color="metadata.sync_files ? 'success' : 'grey'" variant="tonal">
+              {{ metadata.sync_files ? 'Bật' : 'Tắt' }}
+            </v-chip>
+          </v-col>
+        </template>
         <v-col cols="6" sm="3">
           <div class="text-caption text-grey">Ngày tạo</div>
           <div>{{ formatDateTime(channel.created_at) }}</div>
         </v-col>
       </v-row>
+    </v-card>
+
+    <v-card v-if="isPersonalZalo" class="pa-4 mb-4 personal-zalo-connection-card">
+      <div class="d-flex align-center mb-3 flex-wrap ga-2">
+        <div>
+          <div class="text-subtitle-1 font-weight-bold">
+            <v-icon start size="small">mdi-cellphone-link</v-icon>
+            Kết nối Zalo cá nhân
+          </div>
+          <div class="text-body-2 text-medium-emphasis">
+            Leader thao tác toàn bộ flow sidecar ngay trong app, không cần nhớ endpoint hay gọi tay sang gateway.
+          </div>
+        </div>
+        <v-spacer />
+        <v-chip size="small" :color="gatewayStatusColor" variant="tonal">
+          {{ gatewayStatusLabel }}
+        </v-chip>
+        <v-btn size="small" variant="text" prepend-icon="mdi-refresh" :loading="gatewayLoading" @click="loadGatewayState()">
+          Làm mới
+        </v-btn>
+      </div>
+
+      <v-alert
+        :type="gatewayAlert.type"
+        variant="tonal"
+        class="mb-4"
+      >
+        {{ gatewayAlert.message }}
+      </v-alert>
+
+      <v-row class="mb-2">
+        <v-col cols="12" md="7">
+          <v-sheet rounded="lg" border class="pa-4 h-100">
+            <div class="text-overline mb-2">Flow kết nối</div>
+            <div class="d-flex flex-column ga-3">
+              <div class="d-flex ga-3 align-start">
+                <v-avatar size="28" :color="gatewayState.account_exists ? 'success' : 'grey-lighten-1'" variant="tonal">1</v-avatar>
+                <div>
+                  <div class="font-weight-medium">Tạo gateway account</div>
+                  <div class="text-body-2 text-medium-emphasis">Core app tự provision sidecar với internal import endpoint đúng cho Docker.</div>
+                </div>
+              </div>
+              <div class="d-flex ga-3 align-start">
+                <v-avatar size="28" :color="gatewayAccount?.status === 'connected' || gatewayAccount?.status === 'qr_pending' || gatewayAccount?.status === 'connecting' ? 'info' : 'grey-lighten-1'" variant="tonal">2</v-avatar>
+                <div>
+                  <div class="font-weight-medium">Quét QR hoặc reconnect</div>
+                  <div class="text-body-2 text-medium-emphasis">Nếu chưa có session thì quét QR. Nếu đã từng login, app sẽ thử reconnect trước.</div>
+                </div>
+              </div>
+              <div class="d-flex ga-3 align-start">
+                <v-avatar size="28" :color="gatewayAccount?.status === 'connected' && (channel?.conversation_count || 0) > 0 ? 'success' : gatewayAccount?.status === 'connected' ? 'warning' : 'grey-lighten-1'" variant="tonal">3</v-avatar>
+                <div>
+                  <div class="font-weight-medium">Đồng bộ và kiểm tra dữ liệu</div>
+                  <div class="text-body-2 text-medium-emphasis">Bấm sync từ gateway, rồi mở danh sách chat để xem dữ liệu đã vào theo đúng owner mapping.</div>
+                </div>
+              </div>
+            </div>
+
+            <v-divider class="my-4" />
+
+            <div v-if="gatewayAccount" class="d-flex align-center ga-3 mb-4 flex-wrap">
+              <v-avatar size="52" color="teal-lighten-5">
+                <v-img v-if="gatewayAccount.avatar_url" :src="gatewayAccount.avatar_url" />
+                <span v-else class="text-subtitle-2">{{ gatewayAvatarInitial }}</span>
+              </v-avatar>
+              <div class="flex-grow-1">
+                <div class="font-weight-bold">{{ gatewayAccount.display_name || channel.name }}</div>
+                <div class="text-body-2 text-medium-emphasis">
+                  UID: {{ gatewayAccount.account_external_id || gatewayAccount.zalo_uid || 'Chưa bind' }}
+                </div>
+                <div class="text-caption text-medium-emphasis">
+                  {{ gatewayAccount.last_imported_at ? `Import gần nhất: ${formatDateTime(gatewayAccount.last_imported_at)}` : 'Chưa import batch nào từ gateway' }}
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex flex-wrap ga-2">
+              <v-btn
+                v-if="!gatewayState.account_exists || gatewayState.next_action === 'create_account' || gatewayState.next_action === 'scan_qr'"
+                color="teal"
+                prepend-icon="mdi-qrcode-scan"
+                :loading="gatewayActionLoading === 'connect'"
+                @click="startGatewayConnect"
+              >
+                {{ gatewayState.account_exists ? 'Tạo lại QR' : 'Bắt đầu kết nối' }}
+              </v-btn>
+              <v-btn
+                v-if="gatewayState.account_exists && gatewayState.next_action === 'reconnect'"
+                color="primary"
+                variant="tonal"
+                prepend-icon="mdi-connection"
+                :loading="gatewayActionLoading === 'reconnect'"
+                @click="reconnectGateway"
+              >
+                Kết nối lại
+              </v-btn>
+              <v-btn
+                v-if="gatewayAccount?.status === 'connected'"
+                color="primary"
+                prepend-icon="mdi-sync"
+                :loading="gatewayActionLoading === 'sync'"
+                @click="syncGateway"
+              >
+                Đồng bộ từ gateway
+              </v-btn>
+              <v-btn
+                v-if="channel?.conversation_count"
+                variant="text"
+                prepend-icon="mdi-forum"
+                @click="goToMessages"
+              >
+                Mở danh sách chat
+              </v-btn>
+            </div>
+
+            <div v-if="gatewayAccount?.last_error" class="text-caption text-error mt-3">
+              Lỗi gần nhất: {{ gatewayAccount.last_error }}
+            </div>
+          </v-sheet>
+        </v-col>
+
+        <v-col cols="12" md="5">
+          <v-sheet rounded="lg" border class="pa-4 h-100 d-flex flex-column justify-center">
+            <template v-if="gatewayAccount?.status === 'qr_pending' && gatewayAccount.qr_image">
+              <div class="text-overline mb-2 text-center">Quét bằng Zalo trên điện thoại</div>
+              <div class="d-flex justify-center mb-3">
+                <v-img :src="gatewayAccount.qr_image" max-width="240" max-height="240" class="rounded-lg border" cover />
+              </div>
+              <div class="text-body-2 text-medium-emphasis text-center">
+                Mở Zalo, vào biểu tượng quét QR, quét mã này rồi xác nhận đăng nhập.
+              </div>
+              <div class="text-caption text-medium-emphasis text-center mt-2">
+                {{ gatewayAccount.qr_generated_at ? `QR tạo lúc ${formatDateTime(gatewayAccount.qr_generated_at)}` : 'Gateway đang chờ bạn quét mã.' }}
+              </div>
+            </template>
+            <template v-else>
+              <div class="d-flex justify-center mb-3">
+                <v-avatar size="72" :color="gatewayStatusColor" variant="tonal">
+                  <v-icon size="36">{{ gatewayStatusIcon }}</v-icon>
+                </v-avatar>
+              </div>
+              <div class="text-subtitle-2 font-weight-medium text-center mb-2">
+                {{ gatewayStatusHeadline }}
+              </div>
+              <div class="text-body-2 text-medium-emphasis text-center">
+                {{ gatewayStatusBody }}
+              </div>
+            </template>
+          </v-sheet>
+        </v-col>
+      </v-row>
+    </v-card>
+
+    <v-card v-if="channel.channel_type === 'personal_zalo_import'" class="pa-4 mb-4">
+      <div class="text-subtitle-1 font-weight-bold mb-3">
+        <v-icon start size="small">mdi-api</v-icon>
+        Cấu hình Sidecar Import
+      </div>
+      <v-alert type="info" variant="tonal" class="mb-4">
+        `personal-zalo-gateway` sẽ dùng endpoint và secret này để import dữ liệu vào core app.
+      </v-alert>
+      <v-row>
+        <v-col cols="12" md="8">
+          <v-text-field :model-value="channel.import_endpoint || ''" label="Import endpoint" readonly density="compact" />
+        </v-col>
+        <v-col cols="12" md="4">
+          <v-text-field :model-value="channel.import_secret || channel.import_secret_masked || ''" label="Import secret" readonly density="compact" />
+        </v-col>
+        <v-col cols="12">
+          <v-text-field :model-value="channel.import_endpoint_internal || channel.import_endpoint || ''" label="Docker/internal import endpoint" readonly density="compact" hint="Gateway bundled trong docker-compose sẽ dùng endpoint này." persistent-hint />
+        </v-col>
+      </v-row>
+    </v-card>
+
+    <v-card v-if="channel.channel_type === 'personal_zalo_import'" class="pa-4 mb-4">
+      <div class="d-flex align-center mb-3">
+        <div class="text-subtitle-1 font-weight-bold">
+          <v-icon start size="small">mdi-account-switch</v-icon>
+          Gán Account Zalo cho Nhân sự
+        </div>
+        <v-spacer />
+        <v-btn size="small" variant="text" prepend-icon="mdi-plus" @click="addAccountOwner">
+          Thêm mapping
+        </v-btn>
+      </div>
+      <v-alert type="info" variant="tonal" class="mb-4">
+        Nếu chưa biết `account_external_id` trước lần import đầu, để trống một dòng duy nhất để làm bootstrap mapping.
+      </v-alert>
+      <div v-for="(owner, index) in accountOwnerDrafts" :key="`owner-${index}`" class="mb-3">
+        <v-row>
+          <v-col cols="12" md="5">
+            <v-text-field v-model="owner.account_external_id" label="Account external ID" density="compact" hint="Để trống cho bootstrap mapping" persistent-hint />
+          </v-col>
+          <v-col cols="12" md="6">
+            <v-select v-model="owner.user_id" :items="tenantUserOptions" label="Nhân sự phụ trách" density="compact" />
+          </v-col>
+          <v-col cols="12" md="1" class="d-flex align-center justify-end">
+            <v-btn icon="mdi-delete-outline" variant="text" color="error" @click="removeAccountOwner(index)" />
+          </v-col>
+        </v-row>
+      </div>
+      <div v-if="!accountOwnerDrafts.length" class="text-body-2 text-grey mb-3">
+        Chưa có mapping nào.
+      </div>
+      <div class="d-flex justify-end">
+        <v-btn color="primary" :loading="savingAccountOwners" @click="saveAccountOwners">
+          Lưu mapping
+        </v-btn>
+      </div>
     </v-card>
 
     <!-- Sync result alert -->
@@ -123,8 +334,10 @@
         <v-card-text>
           <v-text-field v-model="editForm.name" label="Tên kênh" density="compact" class="mb-2" />
           <v-switch v-model="editForm.is_active" label="Hoạt động" density="compact" color="primary" class="mb-2" />
-          <v-select v-model="editForm.sync_interval" :items="syncIntervalOptions" label="Chu kỳ đồng bộ" density="compact" class="mb-2" />
-          <v-switch v-model="editForm.sync_files" label="Lưu file/ảnh" density="compact" color="primary" />
+          <template v-if="channel.channel_type !== 'personal_zalo_import'">
+            <v-select v-model="editForm.sync_interval" :items="syncIntervalOptions" label="Chu kỳ đồng bộ" density="compact" class="mb-2" />
+            <v-switch v-model="editForm.sync_files" label="Lưu file/ảnh" density="compact" color="primary" />
+          </template>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -169,19 +382,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useChannelStore } from '../../stores/channels'
+import type { PersonalZaloGatewayState } from '../../stores/channels'
 import { useAuthStore } from '../../stores/auth'
+import { useUserStore } from '../../stores/users'
 
 const route = useRoute()
 const router = useRouter()
 const channelStore = useChannelStore()
 const authStore = useAuthStore()
+const userStore = useUserStore()
 
 const tenantId = computed(() => route.params.tenantId as string)
 const channelId = computed(() => route.params.channelId as string)
 const channel = computed(() => channelStore.currentChannel)
+const tenantUserOptions = computed(() => userStore.users.map((user) => ({
+  title: user.name ? `${user.name} (${user.email})` : user.email,
+  value: user.user_id,
+})))
+const isPersonalZalo = computed(() => channel.value?.channel_type === 'personal_zalo_import')
 const metadata = computed(() => {
   try { return JSON.parse(channel.value?.metadata || '{}') } catch { return {} }
 })
@@ -197,6 +418,18 @@ const confirmPurge = ref(false)
 const syncResult = ref<{ type: 'success' | 'warning' | 'error' | 'info'; message: string } | null>(null)
 const syncPage = ref(1)
 const syncTotalPages = computed(() => Math.ceil(channelStore.syncHistoryTotal / 10))
+const accountOwnerDrafts = ref<Array<{ account_external_id: string; user_id: string }>>([])
+const savingAccountOwners = ref(false)
+const gatewayState = ref<PersonalZaloGatewayState>({
+  gateway_configured: true,
+  gateway_reachable: true,
+  account_exists: false,
+  next_action: 'create_account',
+  message: '',
+})
+const gatewayLoading = ref(false)
+const gatewayActionLoading = ref<'connect' | 'reconnect' | 'sync' | ''>('')
+let gatewayPollTimer: number | null = null
 
 const editForm = ref({ name: '', is_active: true, sync_interval: 5, sync_files: false })
 
@@ -227,8 +460,157 @@ function formatSyncInterval(mins: number) {
   return `${mins / 1440} ngày`
 }
 
+function channelTypeLabel(channelType: string) {
+  if (channelType === 'facebook') return 'Facebook'
+  if (channelType === 'personal_zalo_import') return 'Personal Zalo'
+  return 'Zalo OA'
+}
+
+function channelTypeColor(channelType: string) {
+  if (channelType === 'facebook') return 'blue'
+  if (channelType === 'personal_zalo_import') return 'teal'
+  return 'green'
+}
+
+const gatewayAccount = computed(() => gatewayState.value.account)
+const gatewayStatusColor = computed(() => {
+  if (!gatewayState.value.gateway_configured || !gatewayState.value.gateway_reachable) return 'warning'
+  if (gatewayAccount.value?.status === 'connected') return 'success'
+  if (gatewayAccount.value?.status === 'qr_pending' || gatewayAccount.value?.status === 'connecting') return 'info'
+  return 'grey'
+})
+const gatewayStatusIcon = computed(() => {
+  if (!gatewayState.value.gateway_configured || !gatewayState.value.gateway_reachable) return 'mdi-lan-disconnect'
+  if (gatewayAccount.value?.status === 'connected') return 'mdi-check-decagram'
+  if (gatewayAccount.value?.status === 'qr_pending') return 'mdi-qrcode-scan'
+  if (gatewayAccount.value?.status === 'connecting') return 'mdi-connection'
+  return 'mdi-cellphone-link-off'
+})
+const gatewayStatusLabel = computed(() => {
+  if (!gatewayState.value.gateway_configured) return 'Chưa cấu hình gateway'
+  if (!gatewayState.value.gateway_reachable) return 'Gateway không phản hồi'
+  if (!gatewayState.value.account_exists) return 'Chưa kết nối'
+  if (gatewayAccount.value?.status === 'connected') return 'Đã kết nối'
+  if (gatewayAccount.value?.status === 'qr_pending') return 'Đang chờ quét QR'
+  if (gatewayAccount.value?.status === 'connecting') return 'Đang kết nối'
+  return 'Đã ngắt kết nối'
+})
+const gatewayStatusHeadline = computed(() => {
+  if (!gatewayState.value.gateway_configured) return 'Backend chưa biết gateway ở đâu'
+  if (!gatewayState.value.gateway_reachable) return 'Gateway đang down hoặc sai URL'
+  if (!gatewayState.value.account_exists) return 'Chưa tạo account phía gateway'
+  if (gatewayAccount.value?.status === 'connected') return 'Zalo cá nhân đã online'
+  if (gatewayAccount.value?.status === 'qr_pending') return 'Gateway đang chờ bạn quét mã'
+  if (gatewayAccount.value?.status === 'connecting') return 'Đang restore session cũ'
+  return 'Session hiện không hoạt động'
+})
+const gatewayStatusBody = computed(() => {
+  if (gatewayState.value.message) return gatewayState.value.message
+  if (!gatewayState.value.account_exists) return 'Bấm "Bắt đầu kết nối" để app tự tạo sidecar account và phát mã QR.'
+  if (gatewayAccount.value?.status === 'connected') return 'Bạn có thể sync ngay. Nếu leader chưa thấy chat, kiểm tra owner mapping và gửi vài tin nhắn mới.'
+  if (gatewayAccount.value?.status === 'connecting') return 'App đang thử lấy lại session đã lưu. Màn này sẽ tự làm mới.'
+  if (gatewayAccount.value?.status === 'qr_pending') return 'Sau khi quét QR thành công, trạng thái sẽ tự chuyển sang đã kết nối.'
+  return gatewayAccount.value?.last_error || 'Bấm reconnect nếu còn session, hoặc tạo QR mới nếu session đã chết.'
+})
+const gatewayAlert = computed(() => {
+  if (!gatewayState.value.gateway_configured) {
+    return { type: 'warning' as const, message: 'Backend chưa cấu hình PERSONAL_ZALO_GATEWAY_BASE_URL. Flow connected sẽ không chạy cho đến khi env này được set.' }
+  }
+  if (!gatewayState.value.gateway_reachable) {
+    return { type: 'warning' as const, message: 'Core app không gọi được personal-zalo-gateway. Kiểm tra container gateway hoặc URL nội bộ.' }
+  }
+  if (!gatewayState.value.account_exists) {
+    return { type: 'info' as const, message: 'Kênh đã tạo xong nhưng chưa gắn với một account Zalo cá nhân ở sidecar.' }
+  }
+  if (gatewayAccount.value?.status === 'connected') {
+    return { type: 'success' as const, message: 'Gateway đã giữ session Zalo cá nhân. Bây giờ leader chỉ cần sync để gom dữ liệu về một chỗ.' }
+  }
+  if (gatewayAccount.value?.status === 'qr_pending') {
+    return { type: 'info' as const, message: 'Đây là bước duy nhất cần điện thoại. Quét QR, xác nhận trên Zalo, rồi màn này sẽ tự bắt connected state.' }
+  }
+  return { type: 'warning' as const, message: gatewayAccount.value?.last_error || 'Session hiện không usable. Reconnect nếu còn session, hoặc tạo QR mới.' }
+})
+const gatewayAvatarInitial = computed(() => (gatewayAccount.value?.display_name || channel.value?.name || 'Z').slice(0, 1).toUpperCase())
+
 function goToMessages() {
   router.push(`/${tenantId.value}/messages?channel_id=${channelId.value}`)
+}
+
+function clearGatewayPolling() {
+  if (gatewayPollTimer !== null) {
+    window.clearInterval(gatewayPollTimer)
+    gatewayPollTimer = null
+  }
+}
+
+function updateGatewayPolling() {
+  clearGatewayPolling()
+  if (!isPersonalZalo.value) return
+  if (!gatewayState.value.gateway_reachable || !gatewayState.value.gateway_configured) return
+  if (!gatewayAccount.value || !['qr_pending', 'connecting'].includes(gatewayAccount.value.status)) return
+  gatewayPollTimer = window.setInterval(() => {
+    void loadGatewayState(false)
+  }, 3000)
+}
+
+async function loadGatewayState(showSpinner = true) {
+  if (!isPersonalZalo.value) return
+  if (showSpinner) gatewayLoading.value = true
+  try {
+    gatewayState.value = await channelStore.fetchPersonalZaloGatewayState(tenantId.value, channelId.value)
+  } catch (err: any) {
+    gatewayState.value = {
+      gateway_configured: true,
+      gateway_reachable: false,
+      account_exists: false,
+      next_action: 'fix_gateway',
+      message: err.response?.data?.details || err.response?.data?.error || 'Không đọc được trạng thái gateway',
+    }
+  } finally {
+    if (showSpinner) gatewayLoading.value = false
+    updateGatewayPolling()
+  }
+}
+
+async function startGatewayConnect() {
+  gatewayActionLoading.value = 'connect'
+  try {
+    gatewayState.value = await channelStore.connectPersonalZaloGateway(tenantId.value, channelId.value)
+    syncResult.value = { type: 'success', message: gatewayState.value.account?.status === 'connected' ? 'Zalo cá nhân đã kết nối.' : 'Đã tạo flow kết nối. Quét QR để hoàn tất.' }
+    await channelStore.fetchChannel(tenantId.value, channelId.value)
+  } catch (err: any) {
+    syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.message || err.response?.data?.error || 'Không thể bắt đầu kết nối Zalo cá nhân' }
+  } finally {
+    gatewayActionLoading.value = ''
+    updateGatewayPolling()
+  }
+}
+
+async function reconnectGateway() {
+  gatewayActionLoading.value = 'reconnect'
+  try {
+    gatewayState.value = await channelStore.reconnectPersonalZaloGateway(tenantId.value, channelId.value)
+    syncResult.value = { type: 'info', message: 'Đang thử reconnect session Zalo cá nhân.' }
+  } catch (err: any) {
+    syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.message || err.response?.data?.error || 'Reconnect thất bại' }
+  } finally {
+    gatewayActionLoading.value = ''
+    updateGatewayPolling()
+  }
+}
+
+async function syncGateway() {
+  gatewayActionLoading.value = 'sync'
+  try {
+    gatewayState.value = await channelStore.syncPersonalZaloGateway(tenantId.value, channelId.value)
+    await channelStore.fetchChannel(tenantId.value, channelId.value)
+    await channelStore.fetchSyncHistory(tenantId.value, channelId.value, syncPage.value)
+    syncResult.value = { type: 'success', message: 'Đã queue sync ở gateway. Dữ liệu mới sẽ được import về channel này.' }
+  } catch (err: any) {
+    syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.message || err.response?.data?.error || 'Sync gateway thất bại' }
+  } finally {
+    gatewayActionLoading.value = ''
+  }
 }
 
 async function doSync() {
@@ -279,15 +661,52 @@ async function doTest() {
 async function saveEdit() {
   saving.value = true
   try {
-    await channelStore.updateChannel(tenantId.value, channelId.value, {
+    const payload: Record<string, unknown> = {
       name: editForm.value.name,
       is_active: editForm.value.is_active,
-      metadata: JSON.stringify({ sync_interval: editForm.value.sync_interval, sync_files: editForm.value.sync_files }),
-    })
+    }
+    if (channel.value?.channel_type !== 'personal_zalo_import') {
+      payload.metadata = JSON.stringify({ sync_interval: editForm.value.sync_interval, sync_files: editForm.value.sync_files })
+    }
+    await channelStore.updateChannel(tenantId.value, channelId.value, payload)
     editDialog.value = false
     await channelStore.fetchChannel(tenantId.value, channelId.value)
   } finally {
     saving.value = false
+  }
+}
+
+function addAccountOwner() {
+  accountOwnerDrafts.value.push({ account_external_id: '', user_id: '' })
+}
+
+function removeAccountOwner(index: number) {
+  accountOwnerDrafts.value.splice(index, 1)
+}
+
+async function loadAccountOwners() {
+  const owners = await channelStore.fetchAccountOwners(tenantId.value, channelId.value)
+  accountOwnerDrafts.value = owners.length
+    ? owners.map(owner => ({ account_external_id: owner.account_external_id || '', user_id: owner.user_id }))
+    : [{ account_external_id: '', user_id: '' }]
+}
+
+async function saveAccountOwners() {
+  savingAccountOwners.value = true
+  try {
+    const payload = accountOwnerDrafts.value
+      .map(owner => ({
+        account_external_id: owner.account_external_id.trim(),
+        user_id: owner.user_id,
+      }))
+      .filter(owner => owner.user_id)
+    await channelStore.updateAccountOwners(tenantId.value, channelId.value, payload)
+    await loadAccountOwners()
+    syncResult.value = { type: 'success', message: 'Đã lưu mapping account cho nhân sự' }
+  } catch (err: any) {
+    syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.error || 'Lưu mapping thất bại' }
+  } finally {
+    savingAccountOwners.value = false
   }
 }
 
@@ -334,6 +753,10 @@ watch(syncPage, (p) => {
   channelStore.fetchSyncHistory(tenantId.value, channelId.value, p)
 })
 
+watch(() => gatewayAccount.value?.status, () => {
+  updateGatewayPolling()
+})
+
 onMounted(async () => {
   // Handle OAuth callback redirect
   const params = new URLSearchParams(window.location.search)
@@ -347,5 +770,22 @@ onMounted(async () => {
 
   await channelStore.fetchChannel(tenantId.value, channelId.value)
   await channelStore.fetchSyncHistory(tenantId.value, channelId.value, 1)
+  if (channelStore.currentChannel?.channel_type === 'personal_zalo_import') {
+    await userStore.fetchUsers(tenantId.value)
+    await loadAccountOwners()
+    await loadGatewayState()
+  }
+})
+
+onBeforeUnmount(() => {
+  clearGatewayPolling()
 })
 </script>
+
+<style scoped>
+.personal-zalo-connection-card {
+  background:
+    radial-gradient(circle at top right, rgba(0, 150, 136, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(0, 150, 136, 0.04), transparent 45%);
+}
+</style>

@@ -5,6 +5,21 @@ import (
 	"fmt"
 )
 
+// SupportsPullSync reports whether the core app should poll this channel type directly.
+func SupportsPullSync(channelType string) bool {
+	switch channelType {
+	case "zalo_oa", "facebook":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsExternallyManagedImport reports whether messages are pushed into the core app by another service.
+func IsExternallyManagedImport(channelType string) bool {
+	return channelType == "personal_zalo_import"
+}
+
 // NewAdapter creates a ChannelAdapter from channel type and decrypted credentials JSON.
 func NewAdapter(channelType string, credentialsJSON []byte) (ChannelAdapter, error) {
 	switch channelType {

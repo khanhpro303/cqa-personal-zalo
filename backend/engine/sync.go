@@ -21,15 +21,24 @@ import (
 
 // SyncEngine handles pulling messages from external channels into the database.
 type SyncEngine struct {
-	cfg *config.Config
+	cfg      *config.Config
+	ingestor ConversationIngester
 }
 
 func NewSyncEngine(cfg *config.Config) *SyncEngine {
-	return &SyncEngine{cfg: cfg}
+	return &SyncEngine{
+		cfg:      cfg,
+		ingestor: NewIngestService(),
+	}
 }
 
 // SyncChannel syncs a single channel: fetches conversations + messages and upserts into DB.
 func (s *SyncEngine) SyncChannel(ctx context.Context, channel models.Channel) error {
+	if channels.IsExternallyManagedImport(channel.ChannelType) {
+		log.Printf("[sync] skipping channel %s (%s): sync is managed by the external import gateway", channel.Name, channel.ChannelType)
+		return nil
+	}
+
 	log.Printf("[sync] starting sync for channel %s (%s)", channel.Name, channel.ChannelType)
 
 	// Decrypt credentials
@@ -104,8 +113,7 @@ func (s *SyncEngine) SyncChannel(ctx context.Context, channel models.Channel) er
 
 	totalMessages := 0
 	for _, conv := range conversations {
-		// Upsert conversation
-		convID, err := s.upsertConversation(channel.TenantID, channel.ID, conv)
+		convID, err := s.ingestor.EnsureConversation(channel.TenantID, channel.ID, conv)
 		if err != nil {
 			log.Printf("[sync] error upserting conversation %s: %v", conv.ExternalID, err)
 			continue
@@ -123,17 +131,17 @@ func (s *SyncEngine) SyncChannel(ctx context.Context, channel models.Channel) er
 			if syncFiles {
 				s.downloadAttachments(channel.TenantID, convID, &msg)
 			}
-			if err := s.upsertMessage(channel.TenantID, convID, msg); err != nil {
-				log.Printf("[sync] error upserting message %s: %v", msg.ExternalID, err)
-			} else {
-				totalMessages++
-			}
 		}
-
-		// Update conversation message count
-		var count int64
-		db.DB.Model(&models.Message{}).Where("conversation_id = ?", convID).Count(&count)
-		db.DB.Model(&models.Conversation{}).Where("id = ?", convID).Update("message_count", count)
+		ingestResult, err := s.ingestor.IngestMessages(channel.TenantID, convID, messages)
+		if err != nil {
+			log.Printf("[sync] error ingesting conversation %s: %v", conv.ExternalID, err)
+			continue
+		}
+		if err := s.ingestor.RecountConversationMessages(convID); err != nil {
+			log.Printf("[sync] error recounting conversation %s: %v", conv.ExternalID, err)
+			continue
+		}
+		totalMessages += ingestResult.MessagesProcessed
 	}
 
 	log.Printf("[sync] channel %s: synced %d conversations, %d messages", channel.Name, len(conversations), totalMessages)
@@ -161,85 +169,6 @@ func (s *SyncEngine) SyncAllChannels(ctx context.Context, tenantID string) error
 		}
 	}
 	return nil
-}
-
-func (s *SyncEngine) upsertConversation(tenantID, channelID string, conv channels.SyncedConversation) (string, error) {
-	var existing models.Conversation
-	result := db.DB.Where("tenant_id = ? AND channel_id = ? AND external_conversation_id = ?",
-		tenantID, channelID, conv.ExternalID).First(&existing)
-
-	metadataJSON, _ := json.Marshal(conv.Metadata)
-
-	if result.Error == nil {
-		// Update existing
-		db.DB.Model(&existing).Updates(map[string]interface{}{
-			"customer_name":   conv.CustomerName,
-			"last_message_at": conv.LastMessageAt,
-			"metadata":        string(metadataJSON),
-			"updated_at":      time.Now(),
-		})
-		return existing.ID, nil
-	}
-
-	// Create new
-	newConv := models.Conversation{
-		ID:                       pkg.NewUUID(),
-		TenantID:                 tenantID,
-		ChannelID:                channelID,
-		ExternalConversationID:   conv.ExternalID,
-		ExternalUserID:           conv.ExternalUserID,
-		CustomerName:             conv.CustomerName,
-		LastMessageAt:            &conv.LastMessageAt,
-		MessageCount:             0,
-		Metadata:                 string(metadataJSON),
-		CreatedAt:                time.Now(),
-		UpdatedAt:                time.Now(),
-	}
-	if err := db.DB.Create(&newConv).Error; err != nil {
-		return "", err
-	}
-	return newConv.ID, nil
-}
-
-func (s *SyncEngine) upsertMessage(tenantID, conversationID string, msg channels.SyncedMessage) error {
-	// Check if message already exists (dedup by external_message_id)
-	var existing models.Message
-	result := db.DB.Where("tenant_id = ? AND conversation_id = ? AND external_message_id = ?",
-		tenantID, conversationID, msg.ExternalID).First(&existing)
-	if result.Error == nil {
-		// Message exists — update attachments if we have new local paths
-		hasLocalPath := false
-		for _, att := range msg.Attachments {
-			if att.LocalPath != "" {
-				hasLocalPath = true
-				break
-			}
-		}
-		if hasLocalPath {
-			attachmentsJSON, _ := json.Marshal(msg.Attachments)
-			db.DB.Model(&existing).Update("attachments", string(attachmentsJSON))
-		}
-		return nil
-	}
-
-	attachmentsJSON, _ := json.Marshal(msg.Attachments)
-	rawDataJSON, _ := json.Marshal(msg.RawData)
-
-	message := models.Message{
-		ID:                pkg.NewUUID(),
-		TenantID:          tenantID,
-		ConversationID:    conversationID,
-		ExternalMessageID: msg.ExternalID,
-		SenderType:        msg.SenderType,
-		SenderName:        msg.SenderName,
-		Content:           msg.Content,
-		ContentType:       msg.ContentType,
-		Attachments:       string(attachmentsJSON),
-		SentAt:            msg.SentAt,
-		RawData:           string(rawDataJSON),
-		CreatedAt:         time.Now(),
-	}
-	return db.DB.Create(&message).Error
 }
 
 func (s *SyncEngine) updateSyncStatus(channelID, status, errMsg string) error {

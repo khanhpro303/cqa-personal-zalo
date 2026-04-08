@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
 	// Server
-	ServerPort string
-	ServerHost string
+	ServerPort         string
+	ServerHost         string
+	AppInternalBaseURL string
 
 	// Database
 	DBHost     string
@@ -19,8 +21,9 @@ type Config struct {
 	DBName     string
 
 	// Security
-	JWTSecret     string
-	EncryptionKey string // 32 bytes for AES-256-GCM
+	JWTSecret            string
+	EncryptionKey        string // 32 bytes for AES-256-GCM
+	InternalImportSecret string
 
 	// Rate limiting
 	RateLimitPerIP   int // requests per minute
@@ -31,23 +34,29 @@ type Config struct {
 
 	// Environment
 	Env string // "development" | "production"
+
+	// Sidecars
+	PersonalZaloGatewayBaseURL string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		ServerPort:       getEnv("SERVER_PORT", "8080"),
-		ServerHost:       getEnv("SERVER_HOST", "127.0.0.1"),
-		DBHost:           getEnv("DB_HOST", "localhost"),
-		DBPort:           getEnv("DB_PORT", "3306"),
-		DBUser:           getEnv("DB_USER", "cqa"),
-		DBPassword:       getEnv("DB_PASSWORD", ""),
-		DBName:           getEnv("DB_NAME", "cqa"),
-		JWTSecret:        getEnv("JWT_SECRET", ""),
-		EncryptionKey:    getEnv("ENCRYPTION_KEY", ""),
-		RateLimitPerIP:   getEnvInt("RATE_LIMIT_PER_IP", 500),
-		RateLimitPerUser: getEnvInt("RATE_LIMIT_PER_USER", 1000),
-		AIMaxTokens:      getEnvInt("AI_MAX_TOKENS", 16384),
-		Env:              getEnv("APP_ENV", "development"),
+		ServerPort:                 getEnv("SERVER_PORT", "8080"),
+		ServerHost:                 getEnv("SERVER_HOST", "127.0.0.1"),
+		AppInternalBaseURL:         getEnv("APP_INTERNAL_BASE_URL", ""),
+		DBHost:                     getEnv("DB_HOST", "localhost"),
+		DBPort:                     getEnv("DB_PORT", "3306"),
+		DBUser:                     getEnv("DB_USER", "cqa"),
+		DBPassword:                 getEnv("DB_PASSWORD", ""),
+		DBName:                     getEnv("DB_NAME", "cqa"),
+		JWTSecret:                  getEnv("JWT_SECRET", ""),
+		EncryptionKey:              getEnv("ENCRYPTION_KEY", ""),
+		InternalImportSecret:       getEnv("INTERNAL_IMPORT_SECRET", ""),
+		RateLimitPerIP:             getEnvInt("RATE_LIMIT_PER_IP", 500),
+		RateLimitPerUser:           getEnvInt("RATE_LIMIT_PER_USER", 1000),
+		AIMaxTokens:                getEnvInt("AI_MAX_TOKENS", 16384),
+		Env:                        getEnv("APP_ENV", "development"),
+		PersonalZaloGatewayBaseURL: strings.TrimRight(getEnv("PERSONAL_ZALO_GATEWAY_BASE_URL", ""), "/"),
 	}
 
 	if cfg.JWTSecret == "" {
@@ -64,6 +73,10 @@ func Load() (*Config, error) {
 	}
 	if cfg.DBPassword == "" {
 		return nil, fmt.Errorf("DB_PASSWORD is required")
+	}
+	if cfg.InternalImportSecret == "" {
+		// Phase 1 fallback to keep existing deployments bootable while allowing a narrower secret.
+		cfg.InternalImportSecret = cfg.JWTSecret
 	}
 
 	return cfg, nil

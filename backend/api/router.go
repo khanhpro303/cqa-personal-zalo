@@ -25,6 +25,7 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
+	r.Use(staticCacheHeaders())
 
 	// Serve static frontend files in production
 	if cfg.IsProduction() {
@@ -287,6 +288,31 @@ func securityHeaders() gin.HandlerFunc {
 		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https:; font-src 'self' data:; frame-ancestors 'none'")
 		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		c.Next()
+	}
+}
+
+func staticCacheHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+
+		// Fingerprinted build assets can be cached aggressively.
+		if strings.HasPrefix(path, "/assets/") {
+			c.Header("Cache-Control", "public, max-age=31536000, immutable")
+			c.Next()
+			return
+		}
+
+		// SPA shell must never be cached to avoid serving stale UI after deploy.
+		isNonAPIAppRoute := !strings.HasPrefix(path, "/api") &&
+			!strings.HasPrefix(path, "/guides/") &&
+			!strings.Contains(path, ".")
+		if path == "/" || isNonAPIAppRoute {
+			c.Header("Cache-Control", "no-store, no-cache, must-revalidate")
+			c.Header("Pragma", "no-cache")
+			c.Header("Expires", "0")
+		}
+
 		c.Next()
 	}
 }

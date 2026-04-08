@@ -377,9 +377,16 @@ async function saveAI() {
 }
 
 async function testKey() {
+  if (!aiSettings.apiKey) {
+    showSnack('Vui lòng nhập API Key', 'error')
+    return
+  }
   testingKey.value = true
   try {
-    const { data } = await api.post(`/tenants/${tenantId.value}/settings/ai/test`)
+    const { data } = await api.post(`/tenants/${tenantId.value}/settings/ai/test`, {
+      provider: aiSettings.provider,
+      api_key: aiSettings.apiKey,
+    })
     showSnack(`${data.provider}: ${data.message}`, 'success')
   } catch (err: any) {
     showSnack(err.response?.data?.error || t('error'), 'error')

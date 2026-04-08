@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -164,29 +166,54 @@ func TestAIKey(c *gin.Context) {
 	tenantID := middleware.GetTenantID(c)
 	cfg, _ := config.Load()
 
+	// Optional request payload so UI can test unsaved key/provider directly.
+	var req struct {
+		Provider string `json:"provider"`
+		APIKey   string `json:"api_key"`
+	}
+	body, _ := io.ReadAll(c.Request.Body)
+	if len(strings.TrimSpace(string(body))) > 0 {
+		if err := json.Unmarshal(body, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+			return
+		}
+	}
+
 	// Get provider
 	var providerSetting models.AppSetting
 	provider := "claude"
 	if err := db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "ai_provider").First(&providerSetting).Error; err == nil {
 		provider = providerSetting.ValuePlain
 	}
-
-	// Get API key by provider (fallback to legacy ai_api_key)
-	setting, err := getFirstSettingByKeys(tenantID, ai.ProviderAPIKeySettingKeys(provider))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no_api_key_configured"})
-		return
+	if req.Provider != "" {
+		switch req.Provider {
+		case "claude", "gemini", "openai":
+			provider = req.Provider
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_provider"})
+			return
+		}
 	}
 
 	var apiKey []byte
-	if len(setting.ValueEncrypted) > 0 {
-		apiKey, err = pkg.Decrypt(setting.ValueEncrypted, cfg.EncryptionKey)
+	if req.APIKey != "" && !isMaskedSecret(req.APIKey) {
+		apiKey = []byte(req.APIKey)
+	} else {
+		// Get API key by provider (fallback to legacy ai_api_key)
+		setting, err := getFirstSettingByKeys(tenantID, ai.ProviderAPIKeySettingKeys(provider))
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "decrypt_failed"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no_api_key_configured"})
 			return
 		}
-	} else {
-		apiKey = []byte(setting.ValuePlain)
+		if len(setting.ValueEncrypted) > 0 {
+			apiKey, err = pkg.Decrypt(setting.ValueEncrypted, cfg.EncryptionKey)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "decrypt_failed"})
+				return
+			}
+		} else {
+			apiKey = []byte(setting.ValuePlain)
+		}
 	}
 
 	_ = apiKey

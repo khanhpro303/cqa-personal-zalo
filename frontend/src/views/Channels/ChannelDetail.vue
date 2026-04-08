@@ -195,10 +195,10 @@
 
         <v-col cols="12" md="5">
           <v-sheet rounded="lg" border class="pa-4 h-100 d-flex flex-column justify-center">
-            <template v-if="gatewayAccount?.status === 'qr_pending' && gatewayAccount.qr_image">
+            <template v-if="gatewayAccount?.status === 'qr_pending' && gatewayQrImageSrc">
               <div class="text-overline mb-2 text-center">Quét bằng Zalo trên điện thoại</div>
               <div class="d-flex justify-center mb-3">
-                <v-img :src="gatewayAccount.qr_image" max-width="240" max-height="240" class="rounded-lg border" cover />
+                <v-img :src="gatewayQrImageSrc" max-width="240" max-height="240" class="rounded-lg border" cover />
               </div>
               <div class="text-body-2 text-medium-emphasis text-center">
                 Mở Zalo, vào biểu tượng quét QR, quét mã này rồi xác nhận đăng nhập.
@@ -531,6 +531,16 @@ const gatewayAlert = computed(() => {
   return { type: 'warning' as const, message: gatewayAccount.value?.last_error || 'Session hiện không usable. Reconnect nếu còn session, hoặc tạo QR mới.' }
 })
 const gatewayAvatarInitial = computed(() => (gatewayAccount.value?.display_name || channel.value?.name || 'Z').slice(0, 1).toUpperCase())
+const gatewayQrImageSrc = computed(() => normalizeGatewayQrImage(gatewayAccount.value?.qr_image))
+
+function normalizeGatewayQrImage(raw?: string): string {
+  const source = raw?.trim()
+  if (!source) return ''
+  if (source.startsWith('data:image/')) return source
+  if (source.startsWith('http://') || source.startsWith('https://') || source.startsWith('blob:')) return source
+  // personal-zalo-gateway trả base64 PNG thô, cần thêm data URL để <v-img> render được.
+  return `data:image/png;base64,${source}`
+}
 
 function goToMessages() {
   router.push(`/${tenantId.value}/messages?channel_id=${channelId.value}`)

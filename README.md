@@ -59,6 +59,15 @@ docker compose restart nginx
 
 SSL sẽ tự động tạo và gia hạn qua Let's Encrypt.
 
+## CI/CD setup bắt buộc (GitHub Actions)
+
+Nếu bạn fork repo sang namespace khác, cần cấu hình các mục sau để workflow không fail:
+
+1. Docker Hub secrets cho `Release` workflow: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
+2. Bật GitHub Pages cho `Deploy Docs` workflow: `Settings -> Pages -> Source: GitHub Actions`
+
+Các workflow hiện đã được cấu hình để tự `skip` (thay vì `fail`) khi thiếu cấu hình trên.
+
 ## Công nghệ
 
 | Thành phần | Công nghệ |

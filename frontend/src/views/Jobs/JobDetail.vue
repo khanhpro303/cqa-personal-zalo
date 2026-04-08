@@ -689,7 +689,7 @@
           Chưa cấu hình AI Provider
         </v-card-title>
         <v-card-text>
-          Bạn cần cấu hình API key của AI Provider (Claude hoặc Gemini) trước khi chạy tác vụ phân tích.
+          Bạn cần cấu hình API key của AI Provider (Claude, Gemini hoặc OpenAI) trước khi chạy tác vụ phân tích.
         </v-card-text>
         <v-card-actions>
           <v-spacer />

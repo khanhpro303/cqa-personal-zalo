@@ -7,7 +7,7 @@ import (
 
 func TestBuildQCPrompt(t *testing.T) {
 	rules := "## Phải chào hỏi lịch sự"
-	prompt := BuildQCPrompt(rules)
+	prompt := BuildQCPrompt(rules, "")
 
 	if !strings.Contains(prompt, rules) {
 		t.Error("QC prompt should contain the rules content")

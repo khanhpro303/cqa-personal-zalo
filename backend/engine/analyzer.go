@@ -212,111 +212,111 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 		issuesFound, passCount, analyzedCount, errorCount = a.runBatchMode(ctx, provider, job, run, conversations, since, batchSize)
 	} else {
 
-	for _, conv := range conversations {
-		// Check if context cancelled (timeout or manual cancel)
-		select {
-		case <-ctx.Done():
-			log.Printf("[analyzer] job %s: context cancelled, stopping after %d/%d conversations", job.Name, analyzedCount, len(conversations))
-			goto complete
-		default:
-		}
-
-		// Load messages
-		var messages []models.Message
-		mq := db.DB.Where("conversation_id = ?", conv.ID)
-		if !since.IsZero() {
-			mq = mq.Where("sent_at > ?", since)
-		}
-		mq.Order("sent_at ASC").Find(&messages)
-
-		if len(messages) == 0 {
-			continue
-		}
-
-		// Format transcript
-		chatMessages := make([]ai.ChatMessage, len(messages))
-		for i, m := range messages {
-			chatMessages[i] = ai.ChatMessage{
-				SenderType: m.SenderType,
-				SenderName: m.SenderName,
-				Content:    m.Content,
-				SentAt:     pkg.ToVN(m.SentAt).Format("15:04"),
+		for _, conv := range conversations {
+			// Check if context cancelled (timeout or manual cancel)
+			select {
+			case <-ctx.Done():
+				log.Printf("[analyzer] job %s: context cancelled, stopping after %d/%d conversations", job.Name, analyzedCount, len(conversations))
+				goto complete
+			default:
 			}
-		}
-		transcript := ai.FormatChatTranscript(chatMessages)
 
-		// Build prompt based on job type
-		var systemPrompt string
-		switch job.JobType {
-		case "qc_analysis":
-			systemPrompt = ai.BuildQCPrompt(job.RulesContent, job.SkipConditions)
-		case "classification":
-			systemPrompt = ai.BuildClassificationPrompt(job.RulesConfig)
-		default:
-			continue
-		}
+			// Load messages
+			var messages []models.Message
+			mq := db.DB.Where("conversation_id = ?", conv.ID)
+			if !since.IsZero() {
+				mq = mq.Where("sent_at > ?", since)
+			}
+			mq.Order("sent_at ASC").Find(&messages)
 
-		// Call AI (with rate limit delay)
-		if analyzedCount > 0 {
-			time.Sleep(500 * time.Millisecond) // Avoid rate limiting
-		}
-		aiResp, err := provider.AnalyzeChat(ctx, systemPrompt, transcript)
-		if err != nil {
-			log.Printf("[analyzer] AI error for conversation %s: %v", conv.ID, err)
-			errorCount++
-			// Update progress even on error
-			errProgressJSON, _ := json.Marshal(map[string]interface{}{
+			if len(messages) == 0 {
+				continue
+			}
+
+			// Format transcript
+			chatMessages := make([]ai.ChatMessage, len(messages))
+			for i, m := range messages {
+				chatMessages[i] = ai.ChatMessage{
+					SenderType: m.SenderType,
+					SenderName: m.SenderName,
+					Content:    m.Content,
+					SentAt:     pkg.ToVN(m.SentAt).Format("15:04"),
+				}
+			}
+			transcript := ai.FormatChatTranscript(chatMessages)
+
+			// Build prompt based on job type
+			var systemPrompt string
+			switch job.JobType {
+			case "qc_analysis":
+				systemPrompt = ai.BuildQCPrompt(job.RulesContent, job.SkipConditions)
+			case "classification":
+				systemPrompt = ai.BuildClassificationPrompt(job.RulesConfig)
+			default:
+				continue
+			}
+
+			// Call AI (with rate limit delay)
+			if analyzedCount > 0 {
+				time.Sleep(500 * time.Millisecond) // Avoid rate limiting
+			}
+			aiResp, err := provider.AnalyzeChat(ctx, systemPrompt, transcript)
+			if err != nil {
+				log.Printf("[analyzer] AI error for conversation %s: %v", conv.ID, err)
+				errorCount++
+				// Update progress even on error
+				errProgressJSON, _ := json.Marshal(map[string]interface{}{
+					"conversations_found":    len(conversations),
+					"conversations_analyzed": analyzedCount,
+					"conversations_passed":   passCount,
+					"conversations_errors":   errorCount,
+					"issues_found":           issuesFound,
+				})
+				if err := db.DB.Model(&run).Update("summary", string(errProgressJSON)).Error; err != nil {
+					log.Printf("[analyzer] DB update error (error progress): %v", err)
+				}
+				continue
+			}
+			analyzedCount++
+
+			// Log AI usage + cost
+			cost := ai.CalculateCostUSD(aiResp.Provider, aiResp.Model, aiResp.InputTokens, aiResp.OutputTokens)
+			usageLog := models.AIUsageLog{
+				ID:           pkg.NewUUID(),
+				TenantID:     job.TenantID,
+				JobID:        job.ID,
+				JobRunID:     run.ID,
+				Provider:     aiResp.Provider,
+				Model:        aiResp.Model,
+				InputTokens:  aiResp.InputTokens,
+				OutputTokens: aiResp.OutputTokens,
+				CostUSD:      cost,
+				CreatedAt:    time.Now(),
+			}
+			db.DB.Create(&usageLog)
+
+			// Parse and save results
+			count, passed, err := a.saveResults(run.ID, job.TenantID, conv.ID, job.JobType, aiResp.Content)
+			if err != nil {
+				log.Printf("[analyzer] save results error for %s: %v", conv.ID, err)
+			}
+			issuesFound += count
+			if passed {
+				passCount++
+			}
+
+			// Update progress so frontend can poll real-time status
+			progressJSON, _ := json.Marshal(map[string]interface{}{
 				"conversations_found":    len(conversations),
 				"conversations_analyzed": analyzedCount,
 				"conversations_passed":   passCount,
 				"conversations_errors":   errorCount,
 				"issues_found":           issuesFound,
 			})
-			if err := db.DB.Model(&run).Update("summary", string(errProgressJSON)).Error; err != nil {
-				log.Printf("[analyzer] DB update error (error progress): %v", err)
+			if err := db.DB.Model(&run).Update("summary", string(progressJSON)).Error; err != nil {
+				log.Printf("[analyzer] DB update error (progress): %v", err)
 			}
-			continue
 		}
-		analyzedCount++
-
-		// Log AI usage + cost
-		cost := ai.CalculateCostUSD(aiResp.Provider, aiResp.Model, aiResp.InputTokens, aiResp.OutputTokens)
-		usageLog := models.AIUsageLog{
-			ID:           pkg.NewUUID(),
-			TenantID:     job.TenantID,
-			JobID:        job.ID,
-			JobRunID:     run.ID,
-			Provider:     aiResp.Provider,
-			Model:        aiResp.Model,
-			InputTokens:  aiResp.InputTokens,
-			OutputTokens: aiResp.OutputTokens,
-			CostUSD:      cost,
-			CreatedAt:    time.Now(),
-		}
-		db.DB.Create(&usageLog)
-
-		// Parse and save results
-		count, passed, err := a.saveResults(run.ID, job.TenantID, conv.ID, job.JobType, aiResp.Content)
-		if err != nil {
-			log.Printf("[analyzer] save results error for %s: %v", conv.ID, err)
-		}
-		issuesFound += count
-		if passed {
-			passCount++
-		}
-
-		// Update progress so frontend can poll real-time status
-		progressJSON, _ := json.Marshal(map[string]interface{}{
-			"conversations_found":    len(conversations),
-			"conversations_analyzed": analyzedCount,
-			"conversations_passed":   passCount,
-			"conversations_errors":   errorCount,
-			"issues_found":           issuesFound,
-		})
-		if err := db.DB.Model(&run).Update("summary", string(progressJSON)).Error; err != nil {
-			log.Printf("[analyzer] DB update error (progress): %v", err)
-		}
-	}
 
 	} // end else (non-batch mode)
 
@@ -390,20 +390,28 @@ func (a *Analyzer) getProvider(job models.Job) (ai.AIProvider, error) {
 		provider = providerSetting.ValuePlain
 	}
 
-	// Get API key from tenant settings
+	// Get API key from tenant settings (per provider, with legacy fallback).
+	apiKey := ""
 	var setting models.AppSetting
-	result := db.DB.Where("tenant_id = ? AND setting_key = ?", job.TenantID, "ai_api_key").First(&setting)
-	if result.Error != nil {
+	keyFound := false
+	for _, key := range ai.ProviderAPIKeySettingKeys(provider) {
+		if err := db.DB.Where("tenant_id = ? AND setting_key = ?", job.TenantID, key).First(&setting).Error; err == nil {
+			keyFound = true
+			break
+		}
+	}
+	if !keyFound {
 		return nil, fmt.Errorf("API key not configured - go to Settings > AI Config")
 	}
 
-	apiKey := setting.ValuePlain
 	if setting.ValueEncrypted != nil && len(setting.ValueEncrypted) > 0 {
 		decrypted, err := pkg.Decrypt(setting.ValueEncrypted, a.cfg.EncryptionKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decrypt API key: %w", err)
 		}
 		apiKey = string(decrypted)
+	} else {
+		apiKey = setting.ValuePlain
 	}
 
 	// Get model from tenant settings (fallback to job's ai_model)
@@ -425,6 +433,8 @@ func (a *Analyzer) getProvider(job models.Job) (ai.AIProvider, error) {
 		return ai.NewClaudeProvider(apiKey, model, a.cfg.AIMaxTokens, baseURL), nil
 	case "gemini":
 		return ai.NewGeminiProvider(apiKey, model, baseURL), nil
+	case "openai":
+		return ai.NewOpenAIProvider(apiKey, model, baseURL), nil
 	default:
 		return nil, fmt.Errorf("unsupported AI provider: %s", provider)
 	}

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/xuri/excelize/v2"
 	"github.com/vietbui/chat-quality-agent/api/middleware"
 	"github.com/vietbui/chat-quality-agent/config"
 	"github.com/vietbui/chat-quality-agent/db"
@@ -20,6 +19,7 @@ import (
 	"github.com/vietbui/chat-quality-agent/engine"
 	"github.com/vietbui/chat-quality-agent/notifications"
 	"github.com/vietbui/chat-quality-agent/pkg"
+	"github.com/xuri/excelize/v2"
 )
 
 // jobCancelFuncs stores cancel functions for running jobs, keyed by job ID
@@ -33,7 +33,7 @@ type CreateJobRequest struct {
 	RulesContent    string          `json:"rules_content"`
 	RulesConfig     json.RawMessage `json:"rules_config"`
 	SkipConditions  string          `json:"skip_conditions"`
-	AIProvider      string          `json:"ai_provider" binding:"omitempty,oneof=claude gemini"`
+	AIProvider      string          `json:"ai_provider" binding:"omitempty,oneof=claude gemini openai"`
 	AIModel         string          `json:"ai_model"`
 	Outputs         json.RawMessage `json:"outputs" binding:"required"`
 	OutputSchedule  string          `json:"output_schedule" binding:"required,oneof=instant scheduled cron none"`

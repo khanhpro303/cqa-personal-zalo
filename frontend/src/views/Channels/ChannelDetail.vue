@@ -82,7 +82,7 @@
             Kết nối Zalo cá nhân
           </div>
           <div class="text-body-2 text-medium-emphasis">
-            Leader thao tác toàn bộ flow sidecar ngay trong app, không cần nhớ endpoint hay gọi tay sang gateway.
+            Làm theo từng bước ngay tại đây, không cần thao tác kỹ thuật phức tạp.
           </div>
         </div>
         <v-spacer />
@@ -105,27 +105,27 @@
       <v-row class="mb-2">
         <v-col cols="12" md="7">
           <v-sheet rounded="lg" border class="pa-4 h-100">
-            <div class="text-overline mb-2">Flow kết nối</div>
+            <div class="text-overline mb-2">Các bước kết nối</div>
             <div class="d-flex flex-column ga-3">
               <div class="d-flex ga-3 align-start">
                 <v-avatar size="28" :color="gatewayState.account_exists ? 'success' : 'grey-lighten-1'" variant="tonal">1</v-avatar>
                 <div>
-                  <div class="font-weight-medium">Tạo gateway account</div>
-                  <div class="text-body-2 text-medium-emphasis">Core app tự provision sidecar với internal import endpoint đúng cho Docker.</div>
+                  <div class="font-weight-medium">Bắt đầu kết nối</div>
+                  <div class="text-body-2 text-medium-emphasis">Bấm nút để hệ thống tự chuẩn bị kết nối phía kỹ thuật.</div>
                 </div>
               </div>
               <div class="d-flex ga-3 align-start">
                 <v-avatar size="28" :color="gatewayAccount?.status === 'connected' || gatewayAccount?.status === 'qr_pending' || gatewayAccount?.status === 'connecting' ? 'info' : 'grey-lighten-1'" variant="tonal">2</v-avatar>
                 <div>
-                  <div class="font-weight-medium">Quét QR hoặc reconnect</div>
-                  <div class="text-body-2 text-medium-emphasis">Nếu chưa có session thì quét QR. Nếu đã từng login, app sẽ thử reconnect trước.</div>
+                  <div class="font-weight-medium">Quét QR bằng điện thoại</div>
+                  <div class="text-body-2 text-medium-emphasis">Lần đầu thì quét QR. Nếu đã kết nối trước đó, hệ thống sẽ tự thử vào lại.</div>
                 </div>
               </div>
               <div class="d-flex ga-3 align-start">
                 <v-avatar size="28" :color="gatewayAccount?.status === 'connected' && (channel?.conversation_count || 0) > 0 ? 'success' : gatewayAccount?.status === 'connected' ? 'warning' : 'grey-lighten-1'" variant="tonal">3</v-avatar>
                 <div>
-                  <div class="font-weight-medium">Đồng bộ và kiểm tra dữ liệu</div>
-                  <div class="text-body-2 text-medium-emphasis">Bấm sync từ gateway, rồi mở danh sách chat để xem dữ liệu đã vào theo đúng owner mapping.</div>
+                  <div class="font-weight-medium">Lấy tin nhắn mới và kiểm tra</div>
+                  <div class="text-body-2 text-medium-emphasis">Bấm lấy dữ liệu, rồi mở danh sách chat để kiểm tra kết quả.</div>
                 </div>
               </div>
             </div>
@@ -140,10 +140,10 @@
               <div class="flex-grow-1">
                 <div class="font-weight-bold">{{ gatewayAccount.display_name || channel.name }}</div>
                 <div class="text-body-2 text-medium-emphasis">
-                  UID: {{ gatewayAccount.account_external_id || gatewayAccount.zalo_uid || 'Chưa bind' }}
+                  Mã tài khoản: {{ gatewayAccount.account_external_id || gatewayAccount.zalo_uid || 'Chưa có' }}
                 </div>
                 <div class="text-caption text-medium-emphasis">
-                  {{ gatewayAccount.last_imported_at ? `Import gần nhất: ${formatDateTime(gatewayAccount.last_imported_at)}` : 'Chưa import batch nào từ gateway' }}
+                  {{ gatewayAccount.last_imported_at ? `Lần lấy dữ liệu gần nhất: ${formatDateTime(gatewayAccount.last_imported_at)}` : 'Chưa có lần lấy dữ liệu nào' }}
                 </div>
               </div>
             </div>
@@ -156,7 +156,7 @@
                 :loading="gatewayActionLoading === 'connect'"
                 @click="startGatewayConnect"
               >
-                {{ gatewayState.account_exists ? 'Tạo lại QR' : 'Bắt đầu kết nối' }}
+                {{ gatewayState.account_exists ? 'Lấy mã QR mới' : 'Bắt đầu kết nối' }}
               </v-btn>
               <v-btn
                 v-if="gatewayState.account_exists && gatewayState.next_action === 'reconnect'"
@@ -175,7 +175,7 @@
                 :loading="gatewayActionLoading === 'sync'"
                 @click="syncGateway"
               >
-                Đồng bộ từ gateway
+                Lấy tin nhắn mới
               </v-btn>
               <v-btn
                 v-if="channel?.conversation_count"
@@ -204,7 +204,7 @@
                 Mở Zalo, vào biểu tượng quét QR, quét mã này rồi xác nhận đăng nhập.
               </div>
               <div class="text-caption text-medium-emphasis text-center mt-2">
-                {{ gatewayAccount.qr_generated_at ? `QR tạo lúc ${formatDateTime(gatewayAccount.qr_generated_at)}` : 'Gateway đang chờ bạn quét mã.' }}
+                {{ gatewayAccount.qr_generated_at ? `QR tạo lúc ${formatDateTime(gatewayAccount.qr_generated_at)}` : 'Hệ thống đang chờ bạn quét mã.' }}
               </div>
             </template>
             <template v-else>
@@ -228,20 +228,20 @@
     <v-card v-if="channel.channel_type === 'personal_zalo_import'" class="pa-4 mb-4">
       <div class="text-subtitle-1 font-weight-bold mb-3">
         <v-icon start size="small">mdi-api</v-icon>
-        Cấu hình Sidecar Import
+        Thông tin kết nối (cho kỹ thuật)
       </div>
       <v-alert type="info" variant="tonal" class="mb-4">
-        `personal-zalo-gateway` sẽ dùng endpoint và secret này để import dữ liệu vào core app.
+        Đội kỹ thuật dùng các thông tin này để kết nối dịch vụ lấy dữ liệu Zalo cá nhân.
       </v-alert>
       <v-row>
         <v-col cols="12" md="8">
-          <v-text-field :model-value="channel.import_endpoint || ''" label="Import endpoint" readonly density="compact" />
+          <v-text-field :model-value="channel.import_endpoint || ''" label="Địa chỉ nhận dữ liệu (URL)" readonly density="compact" />
         </v-col>
         <v-col cols="12" md="4">
-          <v-text-field :model-value="channel.import_secret || channel.import_secret_masked || ''" label="Import secret" readonly density="compact" />
+          <v-text-field :model-value="channel.import_secret || channel.import_secret_masked || ''" label="Mã bảo mật kết nối" readonly density="compact" />
         </v-col>
         <v-col cols="12">
-          <v-text-field :model-value="channel.import_endpoint_internal || channel.import_endpoint || ''" label="Docker/internal import endpoint" readonly density="compact" hint="Gateway bundled trong docker-compose sẽ dùng endpoint này." persistent-hint />
+          <v-text-field :model-value="channel.import_endpoint_internal || channel.import_endpoint || ''" label="Địa chỉ nội bộ (Docker)" readonly density="compact" hint="Nếu chạy bằng docker-compose, kỹ thuật sẽ dùng địa chỉ này." persistent-hint />
         </v-col>
       </v-row>
     </v-card>
@@ -250,20 +250,20 @@
       <div class="d-flex align-center mb-3">
         <div class="text-subtitle-1 font-weight-bold">
           <v-icon start size="small">mdi-account-switch</v-icon>
-          Gán Account Zalo cho Nhân sự
+          Giao tài khoản Zalo cho nhân sự phụ trách
         </div>
         <v-spacer />
         <v-btn size="small" variant="text" prepend-icon="mdi-plus" @click="addAccountOwner">
-          Thêm mapping
+          Thêm dòng phân công
         </v-btn>
       </div>
       <v-alert type="info" variant="tonal" class="mb-4">
-        Nếu chưa biết `account_external_id` trước lần import đầu, để trống một dòng duy nhất để làm bootstrap mapping.
+        Nếu chưa biết mã tài khoản Zalo ở lần đầu, bạn có thể để trống một dòng và chọn nhân sự phụ trách trước.
       </v-alert>
       <div v-for="(owner, index) in accountOwnerDrafts" :key="`owner-${index}`" class="mb-3">
         <v-row>
           <v-col cols="12" md="5">
-            <v-text-field v-model="owner.account_external_id" label="Account external ID" density="compact" hint="Để trống cho bootstrap mapping" persistent-hint />
+            <v-text-field v-model="owner.account_external_id" label="Mã tài khoản Zalo" density="compact" hint="Có thể để trống ở lần đồng bộ đầu tiên" persistent-hint />
           </v-col>
           <v-col cols="12" md="6">
             <v-select v-model="owner.user_id" :items="tenantUserOptions" label="Nhân sự phụ trách" density="compact" />
@@ -274,11 +274,11 @@
         </v-row>
       </div>
       <div v-if="!accountOwnerDrafts.length" class="text-body-2 text-grey mb-3">
-        Chưa có mapping nào.
+        Chưa có phân công nào.
       </div>
       <div class="d-flex justify-end">
         <v-btn color="primary" :loading="savingAccountOwners" @click="saveAccountOwners">
-          Lưu mapping
+          Lưu phân công
         </v-btn>
       </div>
     </v-card>
@@ -462,7 +462,7 @@ function formatSyncInterval(mins: number) {
 
 function channelTypeLabel(channelType: string) {
   if (channelType === 'facebook') return 'Facebook'
-  if (channelType === 'personal_zalo_import') return 'Personal Zalo'
+  if (channelType === 'personal_zalo_import') return 'Zalo cá nhân'
   return 'Zalo OA'
 }
 
@@ -487,48 +487,48 @@ const gatewayStatusIcon = computed(() => {
   return 'mdi-cellphone-link-off'
 })
 const gatewayStatusLabel = computed(() => {
-  if (!gatewayState.value.gateway_configured) return 'Chưa cấu hình gateway'
-  if (!gatewayState.value.gateway_reachable) return 'Gateway không phản hồi'
+  if (!gatewayState.value.gateway_configured) return 'Chưa thiết lập'
+  if (!gatewayState.value.gateway_reachable) return 'Mất kết nối'
   if (!gatewayState.value.account_exists) return 'Chưa kết nối'
   if (gatewayAccount.value?.status === 'connected') return 'Đã kết nối'
-  if (gatewayAccount.value?.status === 'qr_pending') return 'Đang chờ quét QR'
+  if (gatewayAccount.value?.status === 'qr_pending') return 'Chờ quét QR'
   if (gatewayAccount.value?.status === 'connecting') return 'Đang kết nối'
   return 'Đã ngắt kết nối'
 })
 const gatewayStatusHeadline = computed(() => {
-  if (!gatewayState.value.gateway_configured) return 'Backend chưa biết gateway ở đâu'
-  if (!gatewayState.value.gateway_reachable) return 'Gateway đang down hoặc sai URL'
-  if (!gatewayState.value.account_exists) return 'Chưa tạo account phía gateway'
-  if (gatewayAccount.value?.status === 'connected') return 'Zalo cá nhân đã online'
-  if (gatewayAccount.value?.status === 'qr_pending') return 'Gateway đang chờ bạn quét mã'
-  if (gatewayAccount.value?.status === 'connecting') return 'Đang restore session cũ'
-  return 'Session hiện không hoạt động'
+  if (!gatewayState.value.gateway_configured) return 'Chưa bật kết nối Zalo cá nhân'
+  if (!gatewayState.value.gateway_reachable) return 'Không kết nối được dịch vụ Zalo cá nhân'
+  if (!gatewayState.value.account_exists) return 'Sẵn sàng bắt đầu kết nối'
+  if (gatewayAccount.value?.status === 'connected') return 'Zalo cá nhân đã sẵn sàng'
+  if (gatewayAccount.value?.status === 'qr_pending') return 'Đang chờ bạn quét mã QR'
+  if (gatewayAccount.value?.status === 'connecting') return 'Đang thử kết nối lại'
+  return 'Kết nối tạm thời gián đoạn'
 })
 const gatewayStatusBody = computed(() => {
   if (gatewayState.value.message) return gatewayState.value.message
-  if (!gatewayState.value.account_exists) return 'Bấm "Bắt đầu kết nối" để app tự tạo sidecar account và phát mã QR.'
-  if (gatewayAccount.value?.status === 'connected') return 'Bạn có thể sync ngay. Nếu leader chưa thấy chat, kiểm tra owner mapping và gửi vài tin nhắn mới.'
-  if (gatewayAccount.value?.status === 'connecting') return 'App đang thử lấy lại session đã lưu. Màn này sẽ tự làm mới.'
-  if (gatewayAccount.value?.status === 'qr_pending') return 'Sau khi quét QR thành công, trạng thái sẽ tự chuyển sang đã kết nối.'
-  return gatewayAccount.value?.last_error || 'Bấm reconnect nếu còn session, hoặc tạo QR mới nếu session đã chết.'
+  if (!gatewayState.value.account_exists) return 'Bấm "Bắt đầu kết nối", sau đó quét QR trên điện thoại để hoàn tất.'
+  if (gatewayAccount.value?.status === 'connected') return 'Bấm "Lấy tin nhắn mới" để đưa hội thoại vào hệ thống.'
+  if (gatewayAccount.value?.status === 'connecting') return 'Hệ thống đang thử khôi phục phiên cũ và sẽ tự làm mới màn hình.'
+  if (gatewayAccount.value?.status === 'qr_pending') return 'Quét QR rồi xác nhận đăng nhập trong Zalo, trạng thái sẽ tự cập nhật.'
+  return gatewayAccount.value?.last_error || 'Nếu chưa vào được, bấm "Kết nối lại" hoặc tạo mã QR mới.'
 })
 const gatewayAlert = computed(() => {
   if (!gatewayState.value.gateway_configured) {
-    return { type: 'warning' as const, message: 'Backend chưa cấu hình PERSONAL_ZALO_GATEWAY_BASE_URL. Flow connected sẽ không chạy cho đến khi env này được set.' }
+    return { type: 'warning' as const, message: 'Kết nối Zalo cá nhân chưa được bật trên máy chủ. Vui lòng nhờ đội kỹ thuật kiểm tra cấu hình.' }
   }
   if (!gatewayState.value.gateway_reachable) {
-    return { type: 'warning' as const, message: 'Core app không gọi được personal-zalo-gateway. Kiểm tra container gateway hoặc URL nội bộ.' }
+    return { type: 'warning' as const, message: 'Hệ thống chưa gọi được dịch vụ Zalo cá nhân. Vui lòng kiểm tra dịch vụ đang chạy.' }
   }
   if (!gatewayState.value.account_exists) {
-    return { type: 'info' as const, message: 'Kênh đã tạo xong nhưng chưa gắn với một account Zalo cá nhân ở sidecar.' }
+    return { type: 'info' as const, message: 'Kênh đã tạo xong. Bấm "Bắt đầu kết nối" để tiếp tục.' }
   }
   if (gatewayAccount.value?.status === 'connected') {
-    return { type: 'success' as const, message: 'Gateway đã giữ session Zalo cá nhân. Bây giờ leader chỉ cần sync để gom dữ liệu về một chỗ.' }
+    return { type: 'success' as const, message: 'Đã kết nối thành công. Bây giờ bạn chỉ cần bấm "Lấy tin nhắn mới".' }
   }
   if (gatewayAccount.value?.status === 'qr_pending') {
-    return { type: 'info' as const, message: 'Đây là bước duy nhất cần điện thoại. Quét QR, xác nhận trên Zalo, rồi màn này sẽ tự bắt connected state.' }
+    return { type: 'info' as const, message: 'Đây là bước cần điện thoại: quét QR và xác nhận trên Zalo, hệ thống sẽ tự chuyển trạng thái.' }
   }
-  return { type: 'warning' as const, message: gatewayAccount.value?.last_error || 'Session hiện không usable. Reconnect nếu còn session, hoặc tạo QR mới.' }
+  return { type: 'warning' as const, message: gatewayAccount.value?.last_error || 'Phiên đăng nhập hiện không dùng được. Hãy kết nối lại hoặc tạo mã QR mới.' }
 })
 const gatewayAvatarInitial = computed(() => (gatewayAccount.value?.display_name || channel.value?.name || 'Z').slice(0, 1).toUpperCase())
 const gatewayQrImageSrc = computed(() => normalizeGatewayQrImage(gatewayAccount.value?.qr_image))
@@ -574,7 +574,7 @@ async function loadGatewayState(showSpinner = true) {
       gateway_reachable: false,
       account_exists: false,
       next_action: 'fix_gateway',
-      message: err.response?.data?.details || err.response?.data?.error || 'Không đọc được trạng thái gateway',
+      message: err.response?.data?.details || err.response?.data?.error || 'Không lấy được trạng thái kết nối',
     }
   } finally {
     if (showSpinner) gatewayLoading.value = false
@@ -586,10 +586,10 @@ async function startGatewayConnect() {
   gatewayActionLoading.value = 'connect'
   try {
     gatewayState.value = await channelStore.connectPersonalZaloGateway(tenantId.value, channelId.value)
-    syncResult.value = { type: 'success', message: gatewayState.value.account?.status === 'connected' ? 'Zalo cá nhân đã kết nối.' : 'Đã tạo flow kết nối. Quét QR để hoàn tất.' }
+    syncResult.value = { type: 'success', message: gatewayState.value.account?.status === 'connected' ? 'Zalo cá nhân đã kết nối.' : 'Đã tạo phiên kết nối. Quét QR để hoàn tất.' }
     await channelStore.fetchChannel(tenantId.value, channelId.value)
   } catch (err: any) {
-    syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.message || err.response?.data?.error || 'Không thể bắt đầu kết nối Zalo cá nhân' }
+    syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.message || err.response?.data?.error || 'Không thể bắt đầu kết nối' }
   } finally {
     gatewayActionLoading.value = ''
     updateGatewayPolling()
@@ -600,7 +600,7 @@ async function reconnectGateway() {
   gatewayActionLoading.value = 'reconnect'
   try {
     gatewayState.value = await channelStore.reconnectPersonalZaloGateway(tenantId.value, channelId.value)
-    syncResult.value = { type: 'info', message: 'Đang thử reconnect session Zalo cá nhân.' }
+    syncResult.value = { type: 'info', message: 'Đang thử kết nối lại tài khoản Zalo cá nhân.' }
   } catch (err: any) {
     syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.message || err.response?.data?.error || 'Reconnect thất bại' }
   } finally {
@@ -615,9 +615,9 @@ async function syncGateway() {
     gatewayState.value = await channelStore.syncPersonalZaloGateway(tenantId.value, channelId.value)
     await channelStore.fetchChannel(tenantId.value, channelId.value)
     await channelStore.fetchSyncHistory(tenantId.value, channelId.value, syncPage.value)
-    syncResult.value = { type: 'success', message: 'Đã queue sync ở gateway. Dữ liệu mới sẽ được import về channel này.' }
+    syncResult.value = { type: 'success', message: 'Đã bắt đầu lấy dữ liệu. Tin nhắn mới sẽ xuất hiện sau ít phút.' }
   } catch (err: any) {
-    syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.message || err.response?.data?.error || 'Sync gateway thất bại' }
+    syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.message || err.response?.data?.error || 'Lấy dữ liệu thất bại' }
   } finally {
     gatewayActionLoading.value = ''
   }
@@ -712,9 +712,9 @@ async function saveAccountOwners() {
       .filter(owner => owner.user_id)
     await channelStore.updateAccountOwners(tenantId.value, channelId.value, payload)
     await loadAccountOwners()
-    syncResult.value = { type: 'success', message: 'Đã lưu mapping account cho nhân sự' }
+    syncResult.value = { type: 'success', message: 'Đã lưu phân công tài khoản cho nhân sự' }
   } catch (err: any) {
-    syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.error || 'Lưu mapping thất bại' }
+    syncResult.value = { type: 'error', message: err.response?.data?.details || err.response?.data?.error || 'Lưu phân công thất bại' }
   } finally {
     savingAccountOwners.value = false
   }

@@ -13,18 +13,18 @@ type Job struct {
 	InputChannelIDs string `gorm:"type:json;not null" json:"input_channel_ids"` // JSON array of channel UUIDs
 
 	// Rules
-	RulesContent    string `gorm:"type:text" json:"rules_content"`    // Markdown for QC
-	RulesConfig     string `gorm:"type:json" json:"rules_config"`     // JSON array for classification
-	SkipConditions  string `gorm:"type:text" json:"skip_conditions"`  // Conditions to skip evaluation (QC only)
+	RulesContent   string `gorm:"type:text" json:"rules_content"`   // Markdown for QC
+	RulesConfig    string `gorm:"type:json" json:"rules_config"`    // JSON array for classification
+	SkipConditions string `gorm:"type:text" json:"skip_conditions"` // Conditions to skip evaluation (QC only)
 
 	// AI
-	AIProvider string `gorm:"column:ai_provider;type:varchar(20);default:'claude'" json:"ai_provider"` // claude | gemini
+	AIProvider string `gorm:"column:ai_provider;type:varchar(20);default:'claude'" json:"ai_provider"` // claude | gemini | openai
 	AIModel    string `gorm:"type:varchar(100)" json:"ai_model"`
 
 	// Output
-	Outputs        string `gorm:"type:json;not null" json:"outputs"`                          // [{type, config...}]
-	OutputSchedule string `gorm:"type:varchar(20);default:'instant'" json:"output_schedule"`   // instant | scheduled | cron
-	OutputCron     string `gorm:"type:varchar(100)" json:"output_cron"`
+	Outputs        string     `gorm:"type:json;not null" json:"outputs"`                         // [{type, config...}]
+	OutputSchedule string     `gorm:"type:varchar(20);default:'instant'" json:"output_schedule"` // instant | scheduled | cron
+	OutputCron     string     `gorm:"type:varchar(100)" json:"output_cron"`
 	OutputAt       *time.Time `json:"output_at"`
 
 	// Analysis schedule
@@ -56,17 +56,17 @@ type JobRun struct {
 }
 
 type JobResult struct {
-	ID             string    `gorm:"type:char(36);primaryKey" json:"id"`
-	JobRunID       string    `gorm:"type:char(36);not null;index:idx_result_run" json:"job_run_id"`
-	TenantID       string    `gorm:"type:char(36);not null;index:idx_result_tenant_type" json:"tenant_id"`
-	ConversationID string    `gorm:"type:char(36);not null;index:idx_result_tenant_conv" json:"conversation_id"`
-	ResultType     string    `gorm:"type:varchar(30);not null;index:idx_result_tenant_type" json:"result_type"` // qc_violation | classification_tag
-	Severity       string    `gorm:"type:varchar(30)" json:"severity"`
-	RuleName       string    `gorm:"type:varchar(255)" json:"rule_name"`
-	Evidence       string    `gorm:"type:text" json:"evidence"`
-	Detail         string    `gorm:"type:json" json:"detail"`
-	AIRawResponse  string    `gorm:"type:text" json:"ai_raw_response,omitempty"`
-	Confidence     float64   `json:"confidence"`
+	ID             string     `gorm:"type:char(36);primaryKey" json:"id"`
+	JobRunID       string     `gorm:"type:char(36);not null;index:idx_result_run" json:"job_run_id"`
+	TenantID       string     `gorm:"type:char(36);not null;index:idx_result_tenant_type" json:"tenant_id"`
+	ConversationID string     `gorm:"type:char(36);not null;index:idx_result_tenant_conv" json:"conversation_id"`
+	ResultType     string     `gorm:"type:varchar(30);not null;index:idx_result_tenant_type" json:"result_type"` // qc_violation | classification_tag
+	Severity       string     `gorm:"type:varchar(30)" json:"severity"`
+	RuleName       string     `gorm:"type:varchar(255)" json:"rule_name"`
+	Evidence       string     `gorm:"type:text" json:"evidence"`
+	Detail         string     `gorm:"type:json" json:"detail"`
+	AIRawResponse  string     `gorm:"type:text" json:"ai_raw_response,omitempty"`
+	Confidence     float64    `json:"confidence"`
 	NotifiedAt     *time.Time `json:"notified_at"`
 	CreatedAt      time.Time  `gorm:"not null;index:idx_result_tenant_type" json:"created_at"`
 }

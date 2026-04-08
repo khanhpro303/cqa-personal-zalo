@@ -72,7 +72,7 @@
       <v-icon size="64" color="grey-lighten-1" class="mb-4">mdi-chat-plus</v-icon>
       <div class="text-h6 text-grey-darken-1 mb-2">Chưa có kênh chat nào</div>
       <div class="text-body-2 text-grey mb-4" style="max-width: 500px; margin: 0 auto;">
-        Kết nối Facebook, Zalo OA hoặc tạo kênh Personal Zalo để sidecar import dữ liệu vào hệ thống AI phân tích chất lượng CSKH.
+        Kết nối Facebook, Zalo OA hoặc Zalo cá nhân để hệ thống tự lấy hội thoại về một nơi. Với Zalo cá nhân, bạn chỉ cần tạo kênh rồi làm theo hướng dẫn quét QR trong màn hình chi tiết.
       </div>
       <v-btn color="primary" prepend-icon="mdi-plus" @click="showDialog = true">Kết nối kênh</v-btn>
     </div>
@@ -87,7 +87,7 @@
           :items="[
             { title: $t('channel_zalo'), value: 'zalo_oa' },
             { title: $t('channel_facebook'), value: 'facebook' },
-            { title: 'Personal Zalo Import', value: 'personal_zalo_import' },
+            { title: 'Zalo cá nhân', value: 'personal_zalo_import' },
           ]"
           class="mb-3"
         />
@@ -116,8 +116,8 @@
         </template>
         <template v-else>
           <v-alert type="info" variant="tonal" class="mb-3">
-            Kênh này dành cho sidecar `personal-zalo-gateway` import dữ liệu vào `chat-quality-agent`.
-            Sau khi tạo, bạn sẽ lấy `import endpoint` và `import secret` ở màn hình chi tiết kênh.
+            Kênh này dùng để lấy tin nhắn từ Zalo cá nhân. Sau khi tạo, vào màn hình chi tiết để bấm kết nối, quét QR và đồng bộ tin nhắn.
+            Thông tin kỹ thuật (endpoint/secret) vẫn có sẵn cho đội dev ở màn hình chi tiết.
           </v-alert>
         </template>
 
@@ -165,7 +165,7 @@
             :disabled="!newChannel.name"
             @click="createPersonalZalo"
           >
-            Tạo kênh Personal Zalo
+            Tạo kênh Zalo cá nhân
           </v-btn>
           <v-btn
             v-else
@@ -342,7 +342,7 @@ async function createPersonalZalo() {
     showDialog.value = false
     newChannel.name = ''
     newChannel.creds = {}
-    showSnack('Đã tạo kênh Personal Zalo', 'success')
+    showSnack('Đã tạo kênh Zalo cá nhân', 'success')
     await channelStore.fetchChannels(tenantId.value)
     const channelId = created?.id || created?.data?.id
     if (channelId) {
@@ -428,7 +428,7 @@ function channelColor(channelType: string) {
 function channelLabel(channelType: string) {
   if (channelType === 'zalo_oa') return t('channel_zalo')
   if (channelType === 'facebook') return t('channel_facebook')
-  return 'Personal Zalo'
+  return 'Zalo cá nhân'
 }
 
 

@@ -3,7 +3,7 @@
 [![Docker Hub](https://img.shields.io/docker/v/buitanviet/chat-quality-agent?label=Docker%20Hub&sort=semver)](https://hub.docker.com/r/buitanviet/chat-quality-agent)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Hệ thống phân tích chất lượng chăm sóc khách hàng bằng AI. Tự động đồng bộ tin nhắn từ Zalo OA, Facebook Messenger, dùng AI (Claude/Gemini) đánh giá chất lượng CSKH và gửi cảnh báo qua Telegram/Email.
+Hệ thống phân tích chất lượng chăm sóc khách hàng bằng AI. Tự động đồng bộ tin nhắn từ Zalo OA, Facebook Messenger, dùng AI (Claude/Gemini/OpenAI) đánh giá chất lượng CSKH và gửi cảnh báo qua Telegram/Email.
 
 📖 **Hướng dẫn sử dụng chi tiết: [https://tanviet12.github.io/chat-quality-agent/](https://tanviet12.github.io/chat-quality-agent/)**
 
@@ -12,7 +12,7 @@ Hệ thống phân tích chất lượng chăm sóc khách hàng bằng AI. Tự
 ## Tính năng
 
 - **Đồng bộ tin nhắn** từ Zalo OA và Facebook Messenger
-- **Đánh giá chất lượng CSKH** bằng AI (Claude hoặc Gemini) — Đạt/Không đạt, điểm 0-100, nhận xét chi tiết
+- **Đánh giá chất lượng CSKH** bằng AI (Claude, Gemini hoặc OpenAI) — Đạt/Không đạt, điểm 0-100, nhận xét chi tiết
 - **Phân loại chat** theo chủ đề tùy chỉnh (khiếu nại, góp ý, hỏi giá...)
 - **Cảnh báo tự động** qua Telegram và Email
 - **Batch AI mode** — gom nhiều cuộc chat/lần gọi AI, tiết kiệm chi phí
@@ -66,7 +66,7 @@ SSL sẽ tự động tạo và gia hạn qua Let's Encrypt.
 | Backend | Go 1.25+ / Gin |
 | Frontend | Vue 3 + Vuetify 4 + Vite |
 | Database | MySQL 8.0 |
-| AI | Claude (Anthropic) / Gemini (Google) |
+| AI | Claude (Anthropic) / Gemini (Google) / OpenAI |
 | Reverse Proxy | Nginx + Let's Encrypt (Lego) |
 | Deploy | Docker Compose |
 
@@ -93,7 +93,7 @@ SSL sẽ tự động tạo và gia hạn qua Let's Encrypt.
 ```
 chat-quality-agent/
 ├── backend/            # Go API server
-│   ├── ai/             # AI providers (Claude, Gemini)
+│   ├── ai/             # AI providers (Claude, Gemini, OpenAI)
 │   ├── api/            # REST API handlers + middleware
 │   ├── channels/       # Zalo OA, Facebook adapters
 │   ├── db/             # GORM models + MySQL
@@ -113,7 +113,7 @@ chat-quality-agent/
 
 1. **Kết nối kênh chat**: Cài đặt > Kênh chat > Kết nối Facebook/Zalo
 2. **Đồng bộ tin nhắn**: Bấm "Đồng bộ ngay" hoặc chờ tự động
-3. **Cấu hình AI**: Cài đặt > AI > Chọn Claude/Gemini + nhập API key
+3. **Cấu hình AI**: Cài đặt > AI > Chọn Claude/Gemini/OpenAI + nhập API key
 4. **Tạo công việc**: Công việc > Tạo mới > Wizard 6 bước
 5. **Chạy phân tích**: Chi tiết công việc > Chạy thử hoặc Chạy ngay
 6. **Xem kết quả**: Chi tiết công việc > Kết quả đánh giá

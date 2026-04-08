@@ -6,7 +6,7 @@
       <v-card-text class="d-flex ga-3 pb-0 flex-wrap">
         <v-select
           v-model="filterProvider"
-          :items="['claude', 'gemini']"
+          :items="['claude', 'gemini', 'openai']"
           :label="$t('ai_provider')"
           density="compact"
           clearable
@@ -34,7 +34,7 @@
           <tr v-for="log in logs" :key="log.id">
             <td class="text-caption">{{ formatTime(log.created_at) }}</td>
             <td>
-              <v-chip size="x-small" :color="log.provider === 'claude' ? 'deep-purple' : 'blue'" variant="tonal">{{ log.provider }}</v-chip>
+              <v-chip size="x-small" :color="providerColor(log.provider)" variant="tonal">{{ log.provider }}</v-chip>
             </td>
             <td class="text-body-2">{{ log.model }}</td>
             <td class="text-right text-body-2">{{ log.input_tokens?.toLocaleString() }}</td>
@@ -100,5 +100,18 @@ function formatTime(d: string) {
   const hh = String(dt.getHours()).padStart(2, '0')
   const mi = String(dt.getMinutes()).padStart(2, '0')
   return `${dd}/${mm}/${dt.getFullYear()} ${hh}:${mi}`
+}
+
+function providerColor(provider: string) {
+  switch (provider) {
+    case 'claude':
+      return 'deep-purple'
+    case 'gemini':
+      return 'blue'
+    case 'openai':
+      return 'green'
+    default:
+      return 'grey'
+  }
 }
 </script>

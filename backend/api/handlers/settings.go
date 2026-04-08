@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/vietbui/chat-quality-agent/ai"
 	"github.com/vietbui/chat-quality-agent/api/middleware"
 	"github.com/vietbui/chat-quality-agent/config"
 	"github.com/vietbui/chat-quality-agent/db"
@@ -29,6 +30,15 @@ func GetSettings(c *gin.Context) {
 		} else if len(s.ValueEncrypted) > 0 {
 			// Return masked value for encrypted settings
 			result[s.SettingKey] = "••••••••"
+		}
+	}
+
+	// Backward-compatible alias for current provider key (used by older frontend versions).
+	currentProvider := getSettingValue(settings, "ai_provider", "claude")
+	for _, key := range ai.ProviderAPIKeySettingKeys(currentProvider) {
+		if v, ok := result[key]; ok && v != "" {
+			result["ai_api_key"] = v
+			break
 		}
 	}
 
@@ -59,7 +69,7 @@ func getSettingValue(settings []models.AppSetting, key, defaultVal string) strin
 func SaveAISettings(c *gin.Context) {
 	tenantID := middleware.GetTenantID(c)
 	var req struct {
-		Provider  string `json:"provider" binding:"required,oneof=claude gemini"`
+		Provider  string `json:"provider" binding:"required,oneof=claude gemini openai"`
 		APIKey    string `json:"api_key" binding:"required"`
 		Model     string `json:"model"`
 		BaseURL   string `json:"base_url"`
@@ -72,9 +82,6 @@ func SaveAISettings(c *gin.Context) {
 	}
 
 	cfg, _ := config.Load()
-
-	// Save provider (plain)
-	upsertSetting(tenantID, "ai_provider", req.Provider, nil)
 
 	// Save model (plain)
 	if req.Model != "" {
@@ -89,13 +96,37 @@ func SaveAISettings(c *gin.Context) {
 		db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "ai_base_url").Delete(&models.AppSetting{})
 	}
 
-	// Save API key (encrypted)
-	encrypted, err := pkg.Encrypt([]byte(req.APIKey), cfg.EncryptionKey)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "encryption_failed"})
-		return
+	// Save API key (encrypted, per provider). Keep existing key if masked value is sent.
+	currentProvider := req.Provider
+	var currentProviderSetting models.AppSetting
+	if err := db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "ai_provider").First(&currentProviderSetting).Error; err == nil && currentProviderSetting.ValuePlain != "" {
+		currentProvider = currentProviderSetting.ValuePlain
 	}
-	upsertSetting(tenantID, "ai_api_key", "", encrypted)
+
+	providerKey := ai.ProviderAPIKeySettingKey(req.Provider)
+	if isMaskedSecret(req.APIKey) {
+		if _, err := getFirstSettingByKeys(tenantID, []string{providerKey}); err != nil {
+			// Backward compatibility: allow legacy key only when provider is unchanged.
+			if req.Provider != currentProvider {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "no_api_key_configured"})
+				return
+			}
+			if _, legacyErr := getFirstSettingByKeys(tenantID, []string{"ai_api_key"}); legacyErr != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "no_api_key_configured"})
+				return
+			}
+		}
+	} else {
+		encrypted, err := pkg.Encrypt([]byte(req.APIKey), cfg.EncryptionKey)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "encryption_failed"})
+			return
+		}
+		upsertSetting(tenantID, providerKey, "", encrypted)
+	}
+
+	// Save provider (plain)
+	upsertSetting(tenantID, "ai_provider", req.Provider, nil)
 
 	// Save batch settings
 	if req.BatchMode != "" {
@@ -133,24 +164,29 @@ func TestAIKey(c *gin.Context) {
 	tenantID := middleware.GetTenantID(c)
 	cfg, _ := config.Load()
 
-	// Get the encrypted API key
-	var setting models.AppSetting
-	if err := db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "ai_api_key").First(&setting).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "no_api_key_configured"})
-		return
-	}
-
-	apiKey, err := pkg.Decrypt(setting.ValueEncrypted, cfg.EncryptionKey)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "decrypt_failed"})
-		return
-	}
-
 	// Get provider
 	var providerSetting models.AppSetting
 	provider := "claude"
 	if err := db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "ai_provider").First(&providerSetting).Error; err == nil {
 		provider = providerSetting.ValuePlain
+	}
+
+	// Get API key by provider (fallback to legacy ai_api_key)
+	setting, err := getFirstSettingByKeys(tenantID, ai.ProviderAPIKeySettingKeys(provider))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no_api_key_configured"})
+		return
+	}
+
+	var apiKey []byte
+	if len(setting.ValueEncrypted) > 0 {
+		apiKey, err = pkg.Decrypt(setting.ValueEncrypted, cfg.EncryptionKey)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "decrypt_failed"})
+			return
+		}
+	} else {
+		apiKey = []byte(setting.ValuePlain)
 	}
 
 	_ = apiKey
@@ -163,11 +199,11 @@ func TestAIKey(c *gin.Context) {
 func SaveGeneralSettings(c *gin.Context) {
 	tenantID := middleware.GetTenantID(c)
 	var req struct {
-		CompanyName    string  `json:"company_name"`
-		Timezone       string  `json:"timezone"`
-		Language       string  `json:"language"`
-		ExchangeRate   float64 `json:"exchange_rate_vnd"`
-		AppURL         string  `json:"app_url"`
+		CompanyName  string  `json:"company_name"`
+		Timezone     string  `json:"timezone"`
+		Language     string  `json:"language"`
+		ExchangeRate float64 `json:"exchange_rate_vnd"`
+		AppURL       string  `json:"app_url"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "details": err.Error()})
@@ -299,7 +335,7 @@ func upsertSetting(tenantID, key, plainValue string, encryptedValue []byte) {
 		setting := models.AppSetting{
 			ID:             pkg.NewUUID(),
 			TenantID:       tenantID,
-			SettingKey:      key,
+			SettingKey:     key,
 			ValuePlain:     plainValue,
 			ValueEncrypted: encryptedValue,
 			CreatedAt:      time.Now(),
@@ -307,4 +343,18 @@ func upsertSetting(tenantID, key, plainValue string, encryptedValue []byte) {
 		}
 		db.DB.Create(&setting)
 	}
+}
+
+func isMaskedSecret(v string) bool {
+	return strings.TrimSpace(v) == "••••••••"
+}
+
+func getFirstSettingByKeys(tenantID string, keys []string) (*models.AppSetting, error) {
+	for _, key := range keys {
+		var setting models.AppSetting
+		if err := db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, key).First(&setting).Error; err == nil {
+			return &setting, nil
+		}
+	}
+	return nil, fmt.Errorf("setting not found")
 }

@@ -31,15 +31,26 @@
           <v-select
             v-model="aiSettings.provider"
             :label="$t('ai_provider')"
-            :items="[{ title: 'Claude (Anthropic)', value: 'claude' }, { title: 'Gemini (Google)', value: 'gemini' }]"
+            :items="providerOptions"
             class="mb-3"
             @update:model-value="onProviderChange"
           />
 
           <v-select
+            v-if="aiSettings.provider !== 'openai'"
             v-model="aiSettings.model"
             :label="$t('ai_model')"
             :items="modelOptions"
+            class="mb-3"
+          />
+          <v-combobox
+            v-else
+            v-model="aiSettings.model"
+            :label="$t('ai_model')"
+            :items="modelOptions"
+            hint="Chọn model gợi ý hoặc nhập model OpenAI tùy chỉnh"
+            persistent-hint
+            clearable
             class="mb-3"
           />
 
@@ -66,7 +77,7 @@
             v-if="useCustomBaseUrl"
             v-model="aiSettings.baseUrl"
             label="Base URL"
-            :placeholder="aiSettings.provider === 'claude' ? 'https://api.anthropic.com' : 'https://generativelanguage.googleapis.com'"
+            :placeholder="baseURLPlaceholder"
             hint="Để trống để dùng mặc định"
             persistent-hint
             clearable
@@ -188,6 +199,14 @@ const tabs = [
   { label: 'general', value: 'general', icon: 'mdi-cog' },
 ]
 
+type AIProvider = 'claude' | 'gemini' | 'openai'
+
+const providerOptions = [
+  { title: 'Claude (Anthropic)', value: 'claude' },
+  { title: 'Gemini (Google)', value: 'gemini' },
+  { title: 'OpenAI (Codex)', value: 'openai' },
+]
+
 const claudeModels = [
   { title: 'Claude Sonnet 4.6 (Recommended)', value: 'claude-sonnet-4-6' },
   { title: 'Claude Haiku 4.5 (Fast & Cheap)', value: 'claude-haiku-4-5-20251001' },
@@ -200,9 +219,35 @@ const geminiModels = [
   { title: 'Gemini 2.5 Flash Lite (Fastest)', value: 'gemini-2.5-flash-lite' },
   { title: 'Gemini 2.5 Pro (Most Capable)', value: 'gemini-2.5-pro' },
 ]
+const openAIModels = [
+  { title: 'GPT-5.4 Mini (Recommended)', value: 'gpt-5.4-mini' },
+  { title: 'GPT-5.3-Codex (Coding)', value: 'gpt-5.3-codex' },
+  { title: 'GPT-5.3 Chat (General)', value: 'gpt-5.3-chat-latest' },
+  { title: 'GPT-5 Mini (Low Cost)', value: 'gpt-5-mini' },
+  { title: 'GPT-5 Nano (Cheapest)', value: 'gpt-5-nano' },
+]
+
+const defaultModelByProvider: Record<AIProvider, string> = {
+  claude: 'claude-sonnet-4-6',
+  gemini: 'gemini-2.5-flash',
+  openai: 'gpt-5.4-mini',
+}
+
+const providerApiKeys = reactive<Record<AIProvider, string>>({
+  claude: '',
+  gemini: '',
+  openai: '',
+})
 
 const useCustomBaseUrl = ref(false)
-const aiSettings = reactive({ provider: 'claude', model: 'claude-sonnet-4-6', apiKey: '', baseUrl: '', batchMode: true, batchSize: 5 })
+const aiSettings = reactive<{ provider: AIProvider; model: string; apiKey: string; baseUrl: string; batchMode: boolean; batchSize: number }>({
+  provider: 'claude',
+  model: 'claude-sonnet-4-6',
+  apiKey: '',
+  baseUrl: '',
+  batchMode: true,
+  batchSize: 5,
+})
 const generalSettings = reactive({ companyName: '', timezone: 'Asia/Ho_Chi_Minh', language: 'vi', exchangeRate: 26000, appUrl: '' })
 
 const appUrlRules = [
@@ -211,28 +256,67 @@ const appUrlRules = [
 ]
 
 const modelOptions = computed(() => {
-  return aiSettings.provider === 'claude' ? claudeModels : geminiModels
+  switch (aiSettings.provider) {
+    case 'claude':
+      return claudeModels
+    case 'gemini':
+      return geminiModels
+    case 'openai':
+      return openAIModels
+    default:
+      return claudeModels
+  }
 })
 
 function onProviderChange() {
-  // Reset to default model when switching provider
-  aiSettings.model = aiSettings.provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash'
+  aiSettings.model = defaultModelByProvider[aiSettings.provider]
+  aiSettings.apiKey = providerApiKeys[aiSettings.provider] || ''
 }
+
+const baseURLPlaceholder = computed(() => {
+  switch (aiSettings.provider) {
+    case 'claude':
+      return 'https://api.anthropic.com'
+    case 'gemini':
+      return 'https://generativelanguage.googleapis.com'
+    case 'openai':
+      return 'https://api.openai.com/v1'
+    default:
+      return ''
+  }
+})
 
 async function loadSettings() {
   try {
     const { data } = await api.get(`/tenants/${tenantId.value}/settings`)
-    if (data.settings.ai_provider) aiSettings.provider = data.settings.ai_provider
-    if (data.settings.ai_model) aiSettings.model = data.settings.ai_model
-    if (data.settings.ai_api_key) aiSettings.apiKey = data.settings.ai_api_key
-    if (data.settings.ai_base_url) {
-      aiSettings.baseUrl = data.settings.ai_base_url
+    const settings = data.settings || {}
+
+    providerApiKeys.claude = settings.ai_api_key_claude || ''
+    providerApiKeys.gemini = settings.ai_api_key_gemini || ''
+    providerApiKeys.openai = settings.ai_api_key_openai || ''
+
+    const provider = (settings.ai_provider as AIProvider) || 'claude'
+    aiSettings.provider = provider
+
+    if (!providerApiKeys[provider] && settings.ai_api_key) {
+      providerApiKeys[provider] = settings.ai_api_key
+    }
+    aiSettings.apiKey = providerApiKeys[provider] || ''
+
+    if (settings.ai_model) {
+      aiSettings.model = settings.ai_model
+    } else {
+      aiSettings.model = defaultModelByProvider[provider]
+    }
+
+    if (settings.ai_base_url) {
+      aiSettings.baseUrl = settings.ai_base_url
       useCustomBaseUrl.value = true
     }
-    if (data.settings.ai_batch_mode) aiSettings.batchMode = data.settings.ai_batch_mode === 'true'
-    if (data.settings.ai_batch_size) aiSettings.batchSize = parseInt(data.settings.ai_batch_size) || 5
-    if (data.settings.exchange_rate_vnd) generalSettings.exchangeRate = parseFloat(data.settings.exchange_rate_vnd) || 26000
-    if (data.settings.app_url) generalSettings.appUrl = data.settings.app_url
+    if (settings.ai_batch_mode) aiSettings.batchMode = settings.ai_batch_mode === 'true'
+    if (settings.ai_batch_size) aiSettings.batchSize = parseInt(settings.ai_batch_size) || 5
+    if (settings.exchange_rate_vnd) generalSettings.exchangeRate = parseFloat(settings.exchange_rate_vnd) || 26000
+    if (settings.app_url) generalSettings.appUrl = settings.app_url
     if (data.tenant) {
       generalSettings.companyName = data.tenant.name || ''
       generalSettings.timezone = data.tenant.timezone || 'Asia/Ho_Chi_Minh'
@@ -261,8 +345,12 @@ async function saveAnalysis() {
 }
 
 async function saveAI() {
-  if (!aiSettings.apiKey || aiSettings.apiKey === '••••••••') {
+  if (!aiSettings.apiKey) {
     showSnack('Vui lòng nhập API Key', 'error')
+    return
+  }
+  if (!aiSettings.model) {
+    showSnack('Vui lòng chọn hoặc nhập model', 'error')
     return
   }
   if (useCustomBaseUrl.value && !aiSettings.baseUrl) {
@@ -279,6 +367,7 @@ async function saveAI() {
       batch_mode: aiSettings.batchMode ? 'true' : 'false',
       batch_size: String(aiSettings.batchSize),
     })
+    providerApiKeys[aiSettings.provider] = aiSettings.apiKey
     showSnack(t('success'), 'success')
   } catch (err: any) {
     showSnack(err.response?.data?.error || t('error'), 'error')

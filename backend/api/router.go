@@ -218,7 +218,6 @@ func SetupRouter(cfg *config.Config) *gin.Engine {
 
 			// Demo data
 			tenant.GET("/demo/status", handlers.GetDemoStatus)
-			tenant.POST("/demo/import", middleware.RequireRole("owner", "admin"), handlers.ImportDemoData)
 			tenant.DELETE("/demo/reset", middleware.RequireRole("owner", "admin"), handlers.ResetDemoData)
 		}
 	}

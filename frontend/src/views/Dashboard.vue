@@ -1,17 +1,5 @@
 <template>
   <div>
-    <!-- Demo Import Banner -->
-    <v-alert v-if="demoStatus && !demoStatus.has_data" type="info" variant="tonal" class="mb-4" prominent>
-      <div>
-        <div class="text-subtitle-1 font-weight-bold mb-1">Chào mừng! Bắt đầu với dữ liệu demo</div>
-        <div class="text-body-2 mb-3">Hệ thống chưa có dữ liệu. Nhập dữ liệu demo để trải nghiệm ngay cách AI đánh giá chất lượng CSKH và phân loại cuộc chat tự động. Dữ liệu giả lập ~220 cuộc chat từ SePay Coffee.</div>
-        <v-btn color="primary" variant="flat" :loading="importingDemo" @click="importDemo">
-          <v-icon start>mdi-database-import</v-icon>
-          Nhập dữ liệu demo
-        </v-btn>
-      </div>
-    </v-alert>
-
     <!-- Demo Reset Banner -->
     <v-alert v-if="demoStatus && demoStatus.is_demo" type="warning" variant="tonal" class="mb-4" density="compact">
       <div class="d-flex align-center">
@@ -440,7 +428,6 @@ async function loadDashboard() {
 
 // Demo data state
 const demoStatus = ref<{ has_data: boolean; is_demo: boolean } | null>(null)
-const importingDemo = ref(false)
 const resettingDemo = ref(false)
 const resetDialog = ref(false)
 
@@ -449,19 +436,6 @@ async function loadDemoStatus() {
     const { data } = await api.get(`/tenants/${tenantId.value}/demo/status`)
     demoStatus.value = data
   } catch { /* ignore */ }
-}
-
-async function importDemo() {
-  importingDemo.value = true
-  try {
-    await api.post(`/tenants/${tenantId.value}/demo/import`)
-    await loadDemoStatus()
-    await loadDashboard()
-  } catch (e: any) {
-    alert(e.response?.data?.error || 'Import failed')
-  } finally {
-    importingDemo.value = false
-  }
 }
 
 async function resetDemo() {

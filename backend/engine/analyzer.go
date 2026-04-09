@@ -207,9 +207,10 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 	passCount := 0
 	analyzedCount := 0
 	errorCount := 0
+	firstAIErr := ""
 
 	if batchMode {
-		issuesFound, passCount, analyzedCount, errorCount = a.runBatchMode(ctx, provider, job, run, conversations, since, batchSize)
+		issuesFound, passCount, analyzedCount, errorCount, firstAIErr = a.runBatchMode(ctx, provider, job, run, conversations, since, batchSize)
 	} else {
 
 		for _, conv := range conversations {
@@ -263,6 +264,9 @@ func (a *Analyzer) runJobInternalExt(ctx context.Context, job models.Job, maxCon
 			aiResp, err := provider.AnalyzeChat(ctx, systemPrompt, transcript)
 			if err != nil {
 				log.Printf("[analyzer] AI error for conversation %s: %v", conv.ID, err)
+				if firstAIErr == "" {
+					firstAIErr = err.Error()
+				}
 				errorCount++
 				// Update progress even on error
 				errProgressJSON, _ := json.Marshal(map[string]interface{}{
@@ -333,7 +337,11 @@ complete:
 	runStatus := "success"
 	if analyzedCount == 0 && errorCount > 0 {
 		runStatus = "error"
-		run.ErrorMessage = fmt.Sprintf("AI errors: %d/%d conversations failed", errorCount, len(conversations))
+		if firstAIErr != "" {
+			run.ErrorMessage = fmt.Sprintf("AI errors: %d/%d conversations failed. First error: %s", errorCount, len(conversations), truncateError(firstAIErr))
+		} else {
+			run.ErrorMessage = fmt.Sprintf("AI errors: %d/%d conversations failed", errorCount, len(conversations))
+		}
 	}
 	// Critical: final status update — retry on failure to prevent stuck "running" state
 	for retry := 0; retry < 3; retry++ {
@@ -354,12 +362,12 @@ complete:
 	if !isTestRun {
 		db.DB.Model(&job).Updates(map[string]interface{}{
 			"last_run_at":     &finishedAt,
-			"last_run_status": "success",
+			"last_run_status": runStatus,
 			"updated_at":      finishedAt,
 		})
 	}
 
-	run.Status = "success"
+	run.Status = runStatus
 	run.FinishedAt = &finishedAt
 	run.Summary = string(summaryJSON)
 
@@ -614,7 +622,7 @@ func (a *Analyzer) saveResults(runID, tenantID, conversationID, jobType, aiRespo
 }
 
 // runBatchMode processes conversations in batches of batchSize, sending multiple conversations per AI call.
-func (a *Analyzer) runBatchMode(ctx context.Context, provider ai.AIProvider, job models.Job, run models.JobRun, conversations []models.Conversation, since time.Time, batchSize int) (issuesFound, passCount, analyzedCount, errorCount int) {
+func (a *Analyzer) runBatchMode(ctx context.Context, provider ai.AIProvider, job models.Job, run models.JobRun, conversations []models.Conversation, since time.Time, batchSize int) (issuesFound, passCount, analyzedCount, errorCount int, firstErr string) {
 	// Build system prompt once
 	var systemPrompt string
 	switch job.JobType {
@@ -688,6 +696,9 @@ func (a *Analyzer) runBatchMode(ctx context.Context, provider ai.AIProvider, job
 		aiResp, err := provider.AnalyzeChatBatch(ctx, systemPrompt, items)
 		if err != nil {
 			log.Printf("[analyzer-batch] AI error for batch starting at %d: %v", i, err)
+			if firstErr == "" {
+				firstErr = err.Error()
+			}
 			errorCount += len(batch)
 			batchHadError = true
 			continue
@@ -797,6 +808,15 @@ func (a *Analyzer) runBatchMode(ctx context.Context, provider ai.AIProvider, job
 
 	log.Printf("[analyzer-batch] job %s: %d conversations in %d batches of %d", job.Name, len(prepared), (len(prepared)+batchSize-1)/batchSize, batchSize)
 	return
+}
+
+func truncateError(msg string) string {
+	msg = strings.TrimSpace(msg)
+	const maxLen = 320
+	if len(msg) <= maxLen {
+		return msg
+	}
+	return msg[:maxLen] + "..."
 }
 
 func (a *Analyzer) failRun(run *models.JobRun, err error) (*models.JobRun, error) {

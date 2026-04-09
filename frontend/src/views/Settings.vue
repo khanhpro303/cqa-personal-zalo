@@ -386,6 +386,8 @@ async function testKey() {
     const { data } = await api.post(`/tenants/${tenantId.value}/settings/ai/test`, {
       provider: aiSettings.provider,
       api_key: aiSettings.apiKey,
+      model: aiSettings.model,
+      base_url: useCustomBaseUrl.value ? (aiSettings.baseUrl || '') : '',
     })
     showSnack(`${data.provider}: ${data.message}`, 'success')
   } catch (err: any) {

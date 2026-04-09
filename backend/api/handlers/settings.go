@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -170,6 +171,8 @@ func TestAIKey(c *gin.Context) {
 	var req struct {
 		Provider string `json:"provider"`
 		APIKey   string `json:"api_key"`
+		Model    string `json:"model"`
+		BaseURL  string `json:"base_url"`
 	}
 	body, _ := io.ReadAll(c.Request.Body)
 	if len(strings.TrimSpace(string(body))) > 0 {
@@ -217,9 +220,49 @@ func TestAIKey(c *gin.Context) {
 	}
 
 	_ = apiKey
-	_ = provider
-	// TODO: Actually test the API key by calling the provider
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "provider": provider, "message": "API key configured"})
+
+	// Get model + base URL for provider test (allow request override before save)
+	model := ""
+	if req.Model != "" {
+		model = req.Model
+	} else {
+		var modelSetting models.AppSetting
+		if err := db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "ai_model").First(&modelSetting).Error; err == nil {
+			model = strings.TrimSpace(modelSetting.ValuePlain)
+		}
+	}
+	baseURL := ""
+	if req.BaseURL != "" {
+		baseURL = strings.TrimSpace(req.BaseURL)
+	} else {
+		var baseURLSetting models.AppSetting
+		if err := db.DB.Where("tenant_id = ? AND setting_key = ?", tenantID, "ai_base_url").First(&baseURLSetting).Error; err == nil {
+			baseURL = strings.TrimSpace(baseURLSetting.ValuePlain)
+		}
+	}
+
+	var providerClient ai.AIProvider
+	switch provider {
+	case "claude":
+		providerClient = ai.NewClaudeProvider(string(apiKey), model, cfg.AIMaxTokens, baseURL)
+	case "gemini":
+		providerClient = ai.NewGeminiProvider(string(apiKey), model, baseURL)
+	case "openai":
+		providerClient = ai.NewOpenAIProvider(string(apiKey), model, baseURL)
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_provider"})
+		return
+	}
+
+	testCtx, cancel := context.WithTimeout(c.Request.Context(), 35*time.Second)
+	defer cancel()
+	_, err := providerClient.AnalyzeChat(testCtx, "Respond with valid JSON only: {\"ok\": true}", "Ping")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "api_test_failed", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "provider": provider, "message": "API key works"})
 }
 
 // SaveGeneralSettings saves general tenant settings

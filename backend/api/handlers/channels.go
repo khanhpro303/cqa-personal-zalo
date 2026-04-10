@@ -987,11 +987,11 @@ func GetChannelSyncHistory(c *gin.Context) {
 
 	var total int64
 	db.DB.Model(&models.ActivityLog{}).
-		Where("tenant_id = ? AND resource_type = 'channel' AND resource_id = ? AND action LIKE 'sync.%'", tenantID, channelID).
+		Where("tenant_id = ? AND resource_type = 'channel' AND resource_id = ? AND (action LIKE 'sync.%' OR action LIKE 'import.personal_zalo%')", tenantID, channelID).
 		Count(&total)
 
 	var logs []models.ActivityLog
-	db.DB.Where("tenant_id = ? AND resource_type = 'channel' AND resource_id = ? AND action LIKE 'sync.%'", tenantID, channelID).
+	db.DB.Where("tenant_id = ? AND resource_type = 'channel' AND resource_id = ? AND (action LIKE 'sync.%' OR action LIKE 'import.personal_zalo%')", tenantID, channelID).
 		Order("created_at DESC").
 		Offset((page - 1) * perPage).
 		Limit(perPage).

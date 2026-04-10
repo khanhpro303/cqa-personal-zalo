@@ -307,8 +307,8 @@
           <tr v-for="log in channelStore.syncHistory" :key="log.id">
             <td>{{ formatDateTime(log.created_at) }}</td>
             <td>
-              <v-chip size="x-small" :color="log.action === 'sync.completed' ? 'success' : 'error'" variant="tonal">
-                {{ log.action === 'sync.completed' ? 'Thành công' : 'Lỗi' }}
+              <v-chip size="x-small" :color="(log.action === 'sync.completed' || log.action === 'import.personal_zalo') ? 'success' : 'error'" variant="tonal">
+                {{ (log.action === 'sync.completed' || log.action === 'import.personal_zalo') ? 'Thành công' : 'Lỗi' }}
               </v-chip>
             </td>
             <td class="text-caption">{{ log.detail?.substring(0, 120) }}</td>

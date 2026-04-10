@@ -63,6 +63,17 @@ func NewPersonalZaloImportHandler(ingestor engine.ConversationIngester) gin.Hand
 				toSyncedMessages(bundle.Messages),
 			)
 			if err != nil {
+				db.LogActivity(
+					req.TenantID,
+					"",
+					"system",
+					"import.personal_zalo.error",
+					"channel",
+					req.ChannelID,
+					"Lỗi đồng bộ Zalo cá nhân",
+					err.Error(),
+					c.ClientIP(),
+				)
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "import_failed", "details": err.Error()})
 				return
 			}

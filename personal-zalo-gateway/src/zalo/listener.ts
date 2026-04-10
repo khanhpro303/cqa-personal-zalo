@@ -64,13 +64,20 @@ async function persistMessage(
   }
 
   const rawContent = message.data?.content;
+  
+  let msgTimestamp = Date.now();
+  if (message.data?.ts) msgTimestamp = Number.parseInt(message.data.ts, 10);
+  else if (message.data?.time) msgTimestamp = Number(message.data.time);
+  else if (message.timestamp) msgTimestamp = Number(message.timestamp);
+  else if (message.time) msgTimestamp = Number(message.time);
+
   await store.recordIncomingMessage(accountId, {
     senderUid,
     senderName,
     content: messageContentToString(rawContent),
     contentType: detectContentType(message.data?.msgType, rawContent),
     msgId: String(message.data?.msgId || ''),
-    timestamp: Number.parseInt(message.data?.ts || `${Date.now()}`, 10),
+    timestamp: msgTimestamp,
     isSelf: Boolean(message.isSelf),
     threadId: String(message.threadId || ''),
     threadType,

@@ -70,6 +70,17 @@ async function persistMessage(
   else if (message.data?.time) msgTimestamp = Number(message.data.time);
   else if (message.timestamp) msgTimestamp = Number(message.timestamp);
   else if (message.time) msgTimestamp = Number(message.time);
+  else if (message.data?.cliMsgId) {
+    const tsParts = String(message.data.cliMsgId).split('_');
+    if (tsParts.length > 0 && !Number.isNaN(Number(tsParts[0]))) {
+      msgTimestamp = Number(tsParts[0]);
+    }
+  }
+
+  // Zalo sometimes returns time in seconds. If it's less than year 2001 in ms, it's definitely seconds.
+  if (msgTimestamp > 0 && msgTimestamp < 100000000000) {
+    msgTimestamp *= 1000;
+  }
 
   await store.recordIncomingMessage(accountId, {
     senderUid,

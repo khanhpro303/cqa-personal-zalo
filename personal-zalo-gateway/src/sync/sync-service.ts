@@ -16,6 +16,7 @@ export class SyncService {
 
   start(): void {
     if (this.timer) return;
+    void this.syncAll(); // Run immediately on startup
     this.timer = setInterval(() => {
       void this.syncAll();
     }, this.intervalMs);
@@ -33,7 +34,11 @@ export class SyncService {
       if (!account.accountExternalId && !account.zaloUid) {
         continue;
       }
-      await this.syncAccount(account.id);
+      try {
+        await this.syncAccount(account.id);
+      } catch (error) {
+        logger.error(`[sync] failed to sync account ${account.id}`, error);
+      }
     }
   }
 

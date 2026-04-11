@@ -2,7 +2,7 @@
   <!-- Mobile app bar -->
   <v-app-bar v-if="!mdAndUp" density="compact" color="primary" flat>
     <v-app-bar-nav-icon @click="drawer = !drawer" />
-    <v-app-bar-title class="text-body-1 font-weight-bold">Chat Quality Agent</v-app-bar-title>
+    <v-app-bar-title class="text-body-1 font-weight-bold">BBI CRM Agent</v-app-bar-title>
   </v-app-bar>
 
   <v-navigation-drawer
@@ -16,7 +16,7 @@
     <!-- Logo -->
     <v-list-item class="px-4 py-3">
       <v-list-item-title v-if="!isRail" class="text-subtitle-2 font-weight-bold text-primary" style="white-space: normal; line-height: 1.3">
-        Chat Quality Agent
+        BBI CRM Agent
       </v-list-item-title>
       <v-list-item-title v-else class="text-caption font-weight-bold text-primary text-center">
         CQ

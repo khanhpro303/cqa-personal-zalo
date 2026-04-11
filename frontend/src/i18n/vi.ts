@@ -1,6 +1,6 @@
 export default {
   // Common
-  app_name: 'Chat Quality Agent',
+  app_name: 'BBI CRM Agent',
   save: 'Lưu',
   cancel: 'Hủy',
   delete: 'Xóa',

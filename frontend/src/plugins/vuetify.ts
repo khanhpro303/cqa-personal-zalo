@@ -8,9 +8,9 @@ export default createVuetify({
     themes: {
       light: {
         colors: {
-          primary: '#5C6BC0',      // Indigo — SePay Wiki AI style
-          secondary: '#7986CB',
-          accent: '#536DFE',
+          primary: '#D32F2F',      // BBI CRM Red
+          secondary: '#E57373',
+          accent: '#FF5252',
           success: '#4CAF50',
           warning: '#FF9800',
           error: '#F44336',
@@ -21,9 +21,9 @@ export default createVuetify({
       },
       dark: {
         colors: {
-          primary: '#7986CB',
-          secondary: '#9FA8DA',
-          accent: '#536DFE',
+          primary: '#E53935',
+          secondary: '#EF9A9A',
+          accent: '#FF5252',
           background: '#121212',
           surface: '#1E1E1E',
         },

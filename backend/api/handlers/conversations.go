@@ -105,7 +105,7 @@ func ListConversations(c *gin.Context) {
 	for i, conv := range conversations {
 		var lastMsg *string
 		if conv.LastMessageAt != nil {
-			s := conv.LastMessageAt.Format("2006-01-02T15:04:05Z")
+			s := pkg.ToVN(*conv.LastMessageAt).Format("2006-01-02T15:04:05+07:00")
 			lastMsg = &s
 		}
 		ch := channelMap[conv.ChannelID]
@@ -123,7 +123,7 @@ func ListConversations(c *gin.Context) {
 			OwnerUserID:       meta.OwnerUserID,
 			OwnerName:         meta.OwnerName,
 			OwnerEmail:        meta.OwnerEmail,
-			CreatedAt:         conv.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			CreatedAt:         pkg.ToVN(conv.CreatedAt).Format("2006-01-02T15:04:05+07:00"),
 		}
 	}
 

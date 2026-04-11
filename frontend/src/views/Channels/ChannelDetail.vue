@@ -67,6 +67,12 @@
             </v-chip>
           </v-col>
         </template>
+        <template v-else>
+          <v-col cols="6" sm="3">
+            <div class="text-caption text-grey">Phạm vi đồng bộ</div>
+            <div>{{ metadata.sync_scope === 'direct' ? 'Chỉ tin 1:1' : metadata.sync_scope === 'group' ? 'Chỉ tin nhóm' : 'Tất cả' }}</div>
+          </v-col>
+        </template>
         <v-col cols="6" sm="3">
           <div class="text-caption text-grey">Ngày tạo</div>
           <div>{{ formatDateTime(channel.created_at) }}</div>
@@ -338,6 +344,21 @@
             <v-select v-model="editForm.sync_interval" :items="syncIntervalOptions" label="Chu kỳ đồng bộ" density="compact" class="mb-2" />
             <v-switch v-model="editForm.sync_files" label="Lưu file/ảnh" density="compact" color="primary" />
           </template>
+          <template v-else>
+            <v-select
+              v-model="editForm.sync_scope"
+              :items="[
+                { title: 'Tất cả (Cá nhân & Nhóm)', value: 'all' },
+                { title: 'Chỉ tin nhắn 1:1', value: 'direct' },
+                { title: 'Chỉ tin nhắn nhóm', value: 'group' },
+              ]"
+              label="Phạm vi đồng bộ"
+              density="compact"
+              class="mb-2"
+              hint="Thay đổi loại tin nhắn lấy về từ Zalo cá nhân"
+              persistent-hint
+            />
+          </template>
         </v-card-text>
         <v-card-actions>
           <v-spacer />
@@ -431,7 +452,7 @@ const gatewayLoading = ref(false)
 const gatewayActionLoading = ref<'connect' | 'reconnect' | 'sync' | ''>('')
 let gatewayPollTimer: number | null = null
 
-const editForm = ref({ name: '', is_active: true, sync_interval: 5, sync_files: false })
+const editForm = ref({ name: '', is_active: true, sync_interval: 5, sync_files: false, sync_scope: 'all' })
 
 const syncIntervalOptions = [
   { title: '1 phút', value: 1 },
@@ -677,6 +698,8 @@ async function saveEdit() {
     }
     if (channel.value?.channel_type !== 'personal_zalo_import') {
       payload.metadata = JSON.stringify({ sync_interval: editForm.value.sync_interval, sync_files: editForm.value.sync_files })
+    } else {
+      payload.metadata = JSON.stringify({ sync_scope: editForm.value.sync_scope })
     }
     await channelStore.updateChannel(tenantId.value, channelId.value, payload)
     editDialog.value = false
@@ -755,6 +778,7 @@ watch(editDialog, (v) => {
       is_active: channel.value.is_active,
       sync_interval: metadata.value.sync_interval || 5,
       sync_files: metadata.value.sync_files || false,
+      sync_scope: metadata.value.sync_scope || 'all',
     }
   }
 })

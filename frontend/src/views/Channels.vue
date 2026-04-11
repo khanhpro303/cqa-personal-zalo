@@ -119,6 +119,19 @@
             Kênh này dùng để lấy tin nhắn từ Zalo cá nhân. Sau khi tạo, vào màn hình chi tiết để bấm kết nối, quét QR và đồng bộ tin nhắn.
             Thông tin kỹ thuật (endpoint/secret) vẫn có sẵn cho đội dev ở màn hình chi tiết.
           </v-alert>
+          <v-select
+            v-model="newChannel.sync_scope"
+            :items="[
+              { title: 'Tất cả (Cá nhân & Nhóm)', value: 'all' },
+              { title: 'Chỉ tin nhắn 1:1', value: 'direct' },
+              { title: 'Chỉ tin nhắn nhóm', value: 'group' },
+            ]"
+            label="Phạm vi đồng bộ"
+            density="compact"
+            class="mb-3"
+            hint="Chọn loại tin nhắn sẽ được lấy về từ Zalo cá nhân"
+            persistent-hint
+          />
         </template>
 
         <!-- Sync settings -->
@@ -243,6 +256,7 @@ const newChannel = reactive({
   creds: {} as Record<string, string>,
   sync_files: false,
   sync_interval: 15,
+  sync_scope: 'all',
 })
 
 onMounted(() => {
@@ -337,7 +351,7 @@ async function createPersonalZalo() {
       channel_type: 'personal_zalo_import',
       name: newChannel.name,
       credentials: {},
-      metadata: JSON.stringify({}),
+      metadata: JSON.stringify({ sync_scope: newChannel.sync_scope }),
     })
     showDialog.value = false
     newChannel.name = ''

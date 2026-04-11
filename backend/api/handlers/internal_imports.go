@@ -52,10 +52,28 @@ func NewPersonalZaloImportHandler(ingestor engine.ConversationIngester) gin.Hand
 			}
 		}
 
+		var metadata struct {
+			SyncScope string `json:"sync_scope"`
+		}
+		if channel.Metadata != "" {
+			_ = json.Unmarshal([]byte(channel.Metadata), &metadata)
+		}
+
 		totalProcessed := 0
 		totalInserted := 0
 		totalDeduplicated := 0
 		for _, bundle := range req.Conversations {
+			threadType := bundle.Conversation.ThreadType
+			if threadType == "" {
+				threadType = "user"
+			}
+			if metadata.SyncScope == "direct" && threadType == "group" {
+				continue
+			}
+			if metadata.SyncScope == "group" && threadType == "user" {
+				continue
+			}
+
 			result, err := ingestor.IngestConversationBatch(
 				req.TenantID,
 				req.ChannelID,

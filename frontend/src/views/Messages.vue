@@ -215,7 +215,18 @@
                 class="d-flex mb-2"
                 :class="msg.sender_type === 'agent' ? 'justify-end' : 'justify-start'"
               >
+                <div v-if="reminderMessageMap[msg.id]" class="pa-3 rounded-lg reminder-message-card" style="max-width: 75%; word-break: break-word">
+                  <div class="reminder-message-chip">
+                    <v-icon size="13" color="deep-orange-darken-2">mdi-calendar-clock</v-icon>
+                    <span>Nhắc hẹn</span>
+                  </div>
+                  <div class="reminder-message-title">{{ reminderMessageMap[msg.id].title }}</div>
+                  <div class="mt-1 text-grey" style="opacity: 0.7; font-size: 10px">
+                    {{ formatMessageTime(msg.sent_at) }}
+                  </div>
+                </div>
                 <div
+                  v-else
                   class="pa-2 rounded-lg"
                   :class="msg.sender_type === 'agent' ? 'bg-primary text-white' : 'bg-surface'"
                   style="max-width: 75%; word-break: break-word"
@@ -349,6 +360,7 @@ import { useDisplay } from 'vuetify'
 import { useConversationStore, type Message } from '../stores/conversations'
 import { useChannelStore } from '../stores/channels'
 import { useAuthStore } from '../stores/auth'
+import { parseReminderPayload, type ReminderMessageView } from '../utils/message-render'
 import api from '../api'
 
 const route = useRoute()
@@ -381,6 +393,16 @@ async function loadEvaluationMap() {
 }
 
 const filteredConversations = computed(() => conversationStore.conversations)
+const reminderMessageMap = computed<Record<string, ReminderMessageView>>(() => {
+  const map: Record<string, ReminderMessageView> = {}
+  for (const msg of conversationStore.messages) {
+    const reminder = parseReminderPayload(msg.content)
+    if (reminder) {
+      map[msg.id] = reminder
+    }
+  }
+  return map
+})
 
 function shareConversation() {
   const url = `${window.location.origin}/${tenantId.value}/messages?conv=${selectedConvId.value}`
@@ -808,5 +830,27 @@ onMounted(async () => {
   position: fixed;
   top: 16px;
   right: 16px;
+}
+.reminder-message-card {
+  border: 1px solid rgba(251, 140, 0, 0.35);
+  background: linear-gradient(180deg, #fff8e1 0%, #fffde7 100%);
+}
+.reminder-message-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(251, 140, 0, 0.16);
+  color: #bf360c;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.reminder-message-title {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(0, 0, 0, 0.85);
 }
 </style>

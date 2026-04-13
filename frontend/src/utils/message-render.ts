@@ -9,6 +9,14 @@ export interface ImageMessageView {
   imageUrl: string
 }
 
+export interface ThirdPartyLinkMessageView {
+  title?: string
+  description?: string
+  imageUrl?: string
+  href: string
+  source?: string
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -21,6 +29,58 @@ function parseJsonObject(value: unknown): Record<string, unknown> | null {
     return isRecord(parsed) ? parsed : null
   } catch {
     return null
+  }
+}
+
+function parseString(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value.replace(/\r\n/g, '\n').trim()
+}
+
+function parseHttpUrl(value: unknown): string {
+  const candidate = parseString(value)
+  if (!candidate) return ''
+  try {
+    const url = new URL(candidate)
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return candidate
+    }
+    return ''
+  } catch {
+    return ''
+  }
+}
+
+function isThirdPartyLinkAction(action: string): boolean {
+  const normalized = action.toLowerCase()
+  return normalized === 'recommened.link' || normalized === 'recommended.link'
+}
+
+function parseThirdPartyLinkRoot(root: Record<string, unknown>): ThirdPartyLinkMessageView | null {
+  const action = parseString(root.action)
+  if (!isThirdPartyLinkAction(action)) return null
+
+  const params = parseJsonObject(root.params)
+  const href = [root.href, root.description, params?.mediaTitle].map(parseHttpUrl).find(Boolean) || ''
+  if (!href) return null
+
+  const title = parseString(root.title) || (() => {
+    const mediaTitle = parseString(params?.mediaTitle)
+    return parseHttpUrl(mediaTitle) ? '' : mediaTitle
+  })()
+
+  const descriptionCandidate = parseString(root.description)
+  const description = descriptionCandidate && descriptionCandidate !== href ? descriptionCandidate : ''
+
+  const imageUrl = [root.thumb, params?.stream_icon].map(parseHttpUrl).find(Boolean) || ''
+  const source = parseString(params?.src)
+
+  return {
+    title: title || undefined,
+    description: description || undefined,
+    imageUrl: imageUrl || undefined,
+    href,
+    source: source || undefined,
   }
 }
 
@@ -64,8 +124,9 @@ export function parseImageMessagePayload(content: string): ImageMessageView | nu
   const root = parseJsonObject(content)
   if (!root) return null
 
-  const action = typeof root.action === 'string' ? root.action.trim() : ''
+  const action = parseString(root.action)
   if (action === 'rtf' || action === 'msginfo.actionlist') return null
+  if (isThirdPartyLinkAction(action)) return null
 
   const messageType = typeof root.type === 'string' || typeof root.type === 'number'
     ? String(root.type).trim()
@@ -81,17 +142,32 @@ export function parseImageMessagePayload(content: string): ImageMessageView | nu
   return { title, imageUrl }
 }
 
+export function parseThirdPartyLinkMessagePayload(content: string): ThirdPartyLinkMessageView | null {
+  const root = parseJsonObject(content)
+  if (!root) return null
+  return parseThirdPartyLinkRoot(root)
+}
+
 export function parseStructuredMessageText(content: string): string | null {
   const root = parseJsonObject(content)
   if (!root) return null
 
-  const action = typeof root.action === 'string' ? root.action.trim() : ''
-  if (action !== 'rtf') return null
+  const action = parseString(root.action)
+  if (action === 'rtf') {
+    const title = parseString(root.title)
+    if (!title) return null
+    return title
+  }
 
-  const title = typeof root.title === 'string' ? root.title.replace(/\r\n/g, '\n').trim() : ''
-  if (!title) return null
+  const thirdPartyLink = parseThirdPartyLinkRoot(root)
+  if (thirdPartyLink) {
+    if (thirdPartyLink.title && thirdPartyLink.title !== thirdPartyLink.href) {
+      return `${thirdPartyLink.title}\n${thirdPartyLink.href}`
+    }
+    return thirdPartyLink.href
+  }
 
-  return title
+  return null
 }
 
 export function parseReminderPayload(content: string): ReminderMessageView | null {

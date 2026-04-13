@@ -236,6 +236,38 @@
                     {{ formatMessageTime(msg.sent_at) }}
                   </div>
                 </div>
+                <div v-else-if="thirdPartyLinkMessageMap[msg.id]" class="pa-3 rounded-lg third-party-link-message-card" style="max-width: 75%; word-break: break-word">
+                  <div class="third-party-link-chip">
+                    <v-icon size="13" color="indigo-darken-2">mdi-link-variant</v-icon>
+                    <span>Link ngoài</span>
+                  </div>
+                  <div v-if="thirdPartyLinkMessageMap[msg.id].title" class="third-party-link-message-title">
+                    {{ thirdPartyLinkMessageMap[msg.id].title }}
+                  </div>
+                  <div v-if="thirdPartyLinkMessageMap[msg.id].description" class="third-party-link-message-description">
+                    {{ thirdPartyLinkMessageMap[msg.id].description }}
+                  </div>
+                  <img
+                    v-if="thirdPartyLinkMessageMap[msg.id].imageUrl"
+                    :src="thirdPartyLinkMessageMap[msg.id].imageUrl"
+                    alt="Link preview"
+                    class="third-party-link-message-image"
+                  />
+                  <div v-if="thirdPartyLinkMessageMap[msg.id].source" class="third-party-link-message-source">
+                    Nguồn: {{ thirdPartyLinkMessageMap[msg.id].source }}
+                  </div>
+                  <a
+                    :href="thirdPartyLinkMessageMap[msg.id].href"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="third-party-link-message-link"
+                  >
+                    {{ thirdPartyLinkMessageMap[msg.id].href }}
+                  </a>
+                  <div class="mt-1 text-grey" style="opacity: 0.7; font-size: 10px">
+                    {{ formatMessageTime(msg.sent_at) }}
+                  </div>
+                </div>
                 <div v-else-if="imageMessageMap[msg.id]" class="pa-3 rounded-lg image-json-message-card" style="max-width: 75%; word-break: break-word">
                   <div v-if="imageMessageMap[msg.id].title" class="image-json-message-title">
                     {{ imageMessageMap[msg.id].title }}
@@ -397,8 +429,10 @@ import {
   parseImageMessagePayload,
   parseReminderPayload,
   parseStructuredMessageText,
+  parseThirdPartyLinkMessagePayload,
   type ImageMessageView,
   type ReminderMessageView,
+  type ThirdPartyLinkMessageView,
 } from '../utils/message-render'
 import api from '../api'
 
@@ -443,10 +477,20 @@ const reminderMessageMap = computed<Record<string, ReminderMessageView>>(() => {
   return map
 })
 
+const thirdPartyLinkMessageMap = computed<Record<string, ThirdPartyLinkMessageView>>(() => {
+  const map: Record<string, ThirdPartyLinkMessageView> = {}
+  for (const msg of conversationStore.messages) {
+    if (reminderMessageMap.value[msg.id]) continue
+    const parsed = parseThirdPartyLinkMessagePayload(msg.content || '')
+    if (parsed) map[msg.id] = parsed
+  }
+  return map
+})
+
 const imageMessageMap = computed<Record<string, ImageMessageView>>(() => {
   const map: Record<string, ImageMessageView> = {}
   for (const msg of conversationStore.messages) {
-    if (reminderMessageMap.value[msg.id]) continue
+    if (reminderMessageMap.value[msg.id] || thirdPartyLinkMessageMap.value[msg.id]) continue
     const imageMessage = parseImageMessagePayload(msg.content || '')
     if (imageMessage) map[msg.id] = imageMessage
   }
@@ -951,5 +995,56 @@ onMounted(async () => {
   border-radius: 10px;
   display: block;
   cursor: pointer;
+}
+.third-party-link-message-card {
+  border: 1px solid rgba(63, 81, 181, 0.3);
+  background: linear-gradient(180deg, #eef2ff 0%, #f8faff 100%);
+}
+.third-party-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(63, 81, 181, 0.12);
+  color: #283593;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.third-party-link-message-title {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(0, 0, 0, 0.9);
+  margin-bottom: 4px;
+}
+.third-party-link-message-description {
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(0, 0, 0, 0.68);
+  margin-bottom: 6px;
+}
+.third-party-link-message-image {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  display: block;
+}
+.third-party-link-message-source {
+  font-size: 11px;
+  color: #3949ab;
+  margin-bottom: 4px;
+}
+.third-party-link-message-link {
+  display: block;
+  font-size: 11px;
+  color: #1a237e;
+  text-decoration: underline;
+  margin-bottom: 2px;
+  overflow-wrap: anywhere;
 }
 </style>

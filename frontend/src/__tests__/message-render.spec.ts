@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { parseImageMessagePayload, parseReminderPayload, parseStructuredMessageText } from '../utils/message-render'
+import {
+  parseImageMessagePayload,
+  parseReminderPayload,
+  parseStructuredMessageText,
+  parseThirdPartyLinkMessagePayload,
+} from '../utils/message-render'
 
 describe('parseReminderPayload', () => {
   it('parses reminder payload and extracts title', () => {
@@ -84,6 +89,23 @@ describe('parseStructuredMessageText', () => {
 
     expect(parseStructuredMessageText(content)).toBeNull()
   })
+
+  it('extracts readable text from third-party link payload', () => {
+    const content = JSON.stringify({
+      title: 'Tham gia đặt đơn nhóm từ Crane Tea - Bến Vân Đồn nào cả nhà!',
+      description: 'https://r.grab.com/o/AFVnUrQj',
+      href: 'https://r.grab.com/o/AFVnUrQj',
+      action: 'recommened.link',
+      params: JSON.stringify({
+        mediaTitle: 'https://r.grab.com/o/AFVnUrQj',
+        src: 'r.grab.com',
+      }),
+    })
+
+    expect(parseStructuredMessageText(content)).toBe(
+      'Tham gia đặt đơn nhóm từ Crane Tea - Bến Vân Đồn nào cả nhà!\nhttps://r.grab.com/o/AFVnUrQj',
+    )
+  })
 })
 
 describe('parseImageMessagePayload', () => {
@@ -114,5 +136,41 @@ describe('parseImageMessagePayload', () => {
     })
 
     expect(parseImageMessagePayload(content)).toBeNull()
+  })
+
+  it('does not treat third-party link payload as image payload', () => {
+    const content = JSON.stringify({
+      title: 'Join order',
+      action: 'recommened.link',
+      href: 'https://r.grab.com/o/AFVnUrQj',
+      thumb: 'https://photo-link-talk.zadn.vn/photolinkv2/720/zlv2704413789a1776050478aHR0cHM6Ly9hLmNvbS9iLnBuZw==',
+      type: '',
+    })
+
+    expect(parseImageMessagePayload(content)).toBeNull()
+  })
+})
+
+describe('parseThirdPartyLinkMessagePayload', () => {
+  it('parses third-party link payload for rendering card', () => {
+    const content = JSON.stringify({
+      title: 'Tham gia đặt đơn nhóm từ Crane Tea - Bến Vân Đồn nào cả nhà! Thoải mái chọn món yêu thích và sẵn sàng nhập tiệc ăn uống thôi!',
+      description: 'https://r.grab.com/o/AFVnUrQj',
+      href: 'https://r.grab.com/o/AFVnUrQj',
+      thumb: 'https://photo-link-talk.zadn.vn/photolinkv2/720/zlv2704413789a1776050478aHR0cHM6Ly9yZXMtemFsby56YWRuLnZuL3VwbG9hZC9tZWRpYS8yMDE5LzEwLzE1L2ZlZWRfdGh1bWJfbGlua19fMV9fMTU3MTEzMzEyMjc3OF85Mzc4MC5wbmc=',
+      action: 'recommened.link',
+      params: JSON.stringify({
+        mediaTitle: 'https://r.grab.com/o/AFVnUrQj',
+        src: 'r.grab.com',
+        stream_icon: '',
+      }),
+    })
+
+    expect(parseThirdPartyLinkMessagePayload(content)).toEqual({
+      title: 'Tham gia đặt đơn nhóm từ Crane Tea - Bến Vân Đồn nào cả nhà! Thoải mái chọn món yêu thích và sẵn sàng nhập tiệc ăn uống thôi!',
+      imageUrl: 'https://photo-link-talk.zadn.vn/photolinkv2/720/zlv2704413789a1776050478aHR0cHM6Ly9yZXMtemFsby56YWRuLnZuL3VwbG9hZC9tZWRpYS8yMDE5LzEwLzE1L2ZlZWRfdGh1bWJfbGlua19fMV9fMTU3MTEzMzEyMjc3OF85Mzc4MC5wbmc=',
+      href: 'https://r.grab.com/o/AFVnUrQj',
+      source: 'r.grab.com',
+    })
   })
 })

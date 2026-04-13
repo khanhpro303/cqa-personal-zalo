@@ -220,7 +220,40 @@
                     <v-icon size="13" color="deep-orange-darken-2">mdi-calendar-clock</v-icon>
                     <span>Nhắc hẹn</span>
                   </div>
-                  <div class="reminder-message-title">{{ reminderMessageMap[msg.id].title }}</div>
+                  <img
+                    v-if="reminderMessageMap[msg.id].imageUrl"
+                    :src="reminderMessageMap[msg.id].imageUrl"
+                    alt="Reminder"
+                    class="reminder-message-image"
+                  />
+                  <div v-if="reminderMessageMap[msg.id].description" class="reminder-message-description">
+                    {{ reminderMessageMap[msg.id].description }}
+                  </div>
+                  <div v-else-if="reminderMessageMap[msg.id].title" class="reminder-message-title">
+                    {{ reminderMessageMap[msg.id].title }}
+                  </div>
+                  <div class="mt-1 text-grey" style="opacity: 0.7; font-size: 10px">
+                    {{ formatMessageTime(msg.sent_at) }}
+                  </div>
+                </div>
+                <div v-else-if="imageMessageMap[msg.id]" class="pa-3 rounded-lg image-json-message-card" style="max-width: 75%; word-break: break-word">
+                  <div v-if="imageMessageMap[msg.id].title" class="image-json-message-title">
+                    {{ imageMessageMap[msg.id].title }}
+                  </div>
+                  <a
+                    :href="imageMessageMap[msg.id].imageUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="image-json-message-link"
+                  >
+                    {{ imageMessageMap[msg.id].imageUrl }}
+                  </a>
+                  <img
+                    :src="imageMessageMap[msg.id].imageUrl"
+                    alt="Attachment"
+                    class="image-json-message-image"
+                    @click="lightboxSrc = imageMessageMap[msg.id].imageUrl"
+                  />
                   <div class="mt-1 text-grey" style="opacity: 0.7; font-size: 10px">
                     {{ formatMessageTime(msg.sent_at) }}
                   </div>
@@ -235,7 +268,7 @@
                   <div class="text-caption font-weight-medium" :class="msg.sender_type === 'agent' ? 'text-white' : 'text-primary'" style="font-size: 11px">
                     {{ msg.sender_name }}
                   </div>
-                  <div v-if="msg.content" class="text-body-2" style="white-space: pre-wrap; font-size: 13px; line-height: 1.4">{{ msg.content }}</div>
+                  <div v-if="displayMessageContentMap[msg.id]" class="text-body-2" style="white-space: pre-wrap; font-size: 13px; line-height: 1.4">{{ displayMessageContentMap[msg.id] }}</div>
                   <div v-if="msg.content_type === 'sticker'" class="text-caption font-italic">[Sticker]</div>
                   <div v-if="hasAttachments(msg)" class="mt-1">
                     <template v-for="(att, i) in parseAttachments(msg)" :key="i">
@@ -360,7 +393,13 @@ import { useDisplay } from 'vuetify'
 import { useConversationStore, type Message } from '../stores/conversations'
 import { useChannelStore } from '../stores/channels'
 import { useAuthStore } from '../stores/auth'
-import { parseReminderPayload, type ReminderMessageView } from '../utils/message-render'
+import {
+  parseImageMessagePayload,
+  parseReminderPayload,
+  parseStructuredMessageText,
+  type ImageMessageView,
+  type ReminderMessageView,
+} from '../utils/message-render'
 import api from '../api'
 
 const route = useRoute()
@@ -400,6 +439,25 @@ const reminderMessageMap = computed<Record<string, ReminderMessageView>>(() => {
     if (reminder) {
       map[msg.id] = reminder
     }
+  }
+  return map
+})
+
+const imageMessageMap = computed<Record<string, ImageMessageView>>(() => {
+  const map: Record<string, ImageMessageView> = {}
+  for (const msg of conversationStore.messages) {
+    if (reminderMessageMap.value[msg.id]) continue
+    const imageMessage = parseImageMessagePayload(msg.content || '')
+    if (imageMessage) map[msg.id] = imageMessage
+  }
+  return map
+})
+
+const displayMessageContentMap = computed<Record<string, string>>(() => {
+  const map: Record<string, string> = {}
+  for (const msg of conversationStore.messages) {
+    const content = msg.content || ''
+    map[msg.id] = parseStructuredMessageText(content) || content
   }
   return map
 })
@@ -852,5 +910,46 @@ onMounted(async () => {
   font-size: 13px;
   line-height: 1.45;
   color: rgba(0, 0, 0, 0.85);
+}
+.reminder-message-description {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(0, 0, 0, 0.85);
+}
+.reminder-message-image {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  display: block;
+}
+.image-json-message-card {
+  border: 1px solid rgba(30, 136, 229, 0.35);
+  background: linear-gradient(180deg, #e3f2fd 0%, #f3f9ff 100%);
+}
+.image-json-message-title {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(0, 0, 0, 0.85);
+  margin-bottom: 6px;
+}
+.image-json-message-link {
+  display: block;
+  font-size: 11px;
+  color: #1565c0;
+  text-decoration: underline;
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
+}
+.image-json-message-image {
+  width: 100%;
+  max-width: 260px;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+  cursor: pointer;
 }
 </style>

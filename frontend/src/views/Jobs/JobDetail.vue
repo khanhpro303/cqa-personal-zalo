@@ -470,7 +470,16 @@
                           <v-spacer />
                           <span class="text-caption text-grey">{{ formatTime(msg.sent_at) }}</span>
                         </div>
-                        <div v-if="msg.content" class="text-body-2" style="font-size: 13px;">{{ msg.content }}</div>
+                        <template v-if="displayMessageImage(msg)">
+                          <div v-if="displayMessageImageTitle(msg)" class="text-body-2 mb-1" style="font-size: 13px; white-space: pre-wrap;">
+                            {{ displayMessageImageTitle(msg) }}
+                          </div>
+                          <a :href="displayMessageImageUrl(msg)" target="_blank" rel="noopener noreferrer" class="text-caption" style="display: block; overflow-wrap: anywhere; margin-bottom: 6px;">
+                            {{ displayMessageImageUrl(msg) }}
+                          </a>
+                          <img :src="displayMessageImageUrl(msg)" style="max-width: 180px; max-height: 180px; border-radius: 8px; cursor: pointer;" @click="lightboxSrc = displayMessageImageUrl(msg)" />
+                        </template>
+                        <div v-else-if="displayMessageContent(msg)" class="text-body-2" style="font-size: 13px; white-space: pre-wrap;">{{ displayMessageContent(msg) }}</div>
                         <div v-if="msg.content_type === 'sticker'" class="text-caption font-italic">[Sticker]</div>
                         <div v-if="hasAttachments(msg)" class="mt-1">
                           <template v-for="(att, ai) in parseAttachments(msg)" :key="ai">
@@ -630,7 +639,16 @@
                       <v-spacer />
                       <span class="text-caption text-grey">{{ formatTime(msg.sent_at) }}</span>
                     </div>
-                    <div v-if="msg.content" class="text-body-2" style="font-size: 13px;">{{ msg.content }}</div>
+                    <template v-if="displayMessageImage(msg)">
+                      <div v-if="displayMessageImageTitle(msg)" class="text-body-2 mb-1" style="font-size: 13px; white-space: pre-wrap;">
+                        {{ displayMessageImageTitle(msg) }}
+                      </div>
+                      <a :href="displayMessageImageUrl(msg)" target="_blank" rel="noopener noreferrer" class="text-caption" style="display: block; overflow-wrap: anywhere; margin-bottom: 6px;">
+                        {{ displayMessageImageUrl(msg) }}
+                      </a>
+                      <img :src="displayMessageImageUrl(msg)" style="max-width: 180px; max-height: 180px; border-radius: 8px; cursor: pointer;" @click="lightboxSrc = displayMessageImageUrl(msg)" />
+                    </template>
+                    <div v-else-if="displayMessageContent(msg)" class="text-body-2" style="font-size: 13px; white-space: pre-wrap;">{{ displayMessageContent(msg) }}</div>
                     <div v-if="msg.content_type === 'sticker'" class="text-caption font-italic">[Sticker]</div>
                     <div v-if="hasAttachments(msg)" class="mt-1">
                       <template v-for="(att, ai) in parseAttachments(msg)" :key="ai">
@@ -731,6 +749,7 @@ import { useDisplay } from 'vuetify'
 import { useJobStore, type JobResult } from '../../stores/jobs'
 import { useAuthStore } from '../../stores/auth'
 import api from '../../api'
+import { parseImageMessagePayload, parseStructuredMessageText, type ImageMessageView } from '../../utils/message-render'
 import { Line } from 'vue-chartjs'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Filler, Legend } from 'chart.js'
 
@@ -815,6 +834,35 @@ const paginatedResults = computed(() => {
 const chatMessages = ref<Record<string, any[]>>({})
 const lightboxSrc = ref('')
 const authImageCache = ref<Record<string, string>>({})
+const imagePayloadCache = new Map<string, ImageMessageView | null>()
+
+function parseImagePayloadCached(content: string): ImageMessageView | null {
+  if (imagePayloadCache.has(content)) return imagePayloadCache.get(content) || null
+  const parsed = parseImageMessagePayload(content)
+  imagePayloadCache.set(content, parsed)
+  return parsed
+}
+
+function displayMessageImage(msg: any): ImageMessageView | null {
+  const content = typeof msg?.content === 'string' ? msg.content : ''
+  if (!content) return null
+  return parseImagePayloadCached(content)
+}
+
+function displayMessageImageTitle(msg: any): string {
+  return displayMessageImage(msg)?.title || ''
+}
+
+function displayMessageImageUrl(msg: any): string {
+  return displayMessageImage(msg)?.imageUrl || ''
+}
+
+function displayMessageContent(msg: any): string {
+  const content = typeof msg?.content === 'string' ? msg.content : ''
+  if (!content) return ''
+  if (displayMessageImage(msg)) return ''
+  return parseStructuredMessageText(content) || content
+}
 
 function hasAttachments(msg: any) {
   if (!msg.attachments || msg.attachments === '[]' || msg.attachments === 'null') return false
